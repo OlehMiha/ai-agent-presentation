@@ -1,0 +1,2558 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI-агенти: Skills, MCP і контекст</title>
+<style>
+/* ============ tokens ============ */
+:root{
+  --bg:#06080d; --bg2:#0b1018; --panel:#0e1420; --panel2:#131b29;
+  --line:#1d2839; --line2:#2b3a52;
+  --tx:#e8eef8; --tx2:#a7b4c8; --tx3:#6f7f97;
+  --cy:#3ce0e0; --vi:#8b6cf6; --gr:#4ade80; --am:#f5a524; --pk:#f472b6; --rd:#fb7185; --bl:#60a5fa;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --r:14px;
+  --ease:cubic-bezier(.22,.9,.28,1);
+}
+@property --sweep{syntax:'<percentage>';inherits:false;initial-value:0%}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--tx); font-family:var(--sans);
+  -webkit-font-smoothing:antialiased; overflow:hidden;
+  font-feature-settings:"ss01","cv05";
+}
+/* ambient background */
+body::before{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(900px 600px at 12% -5%, rgba(60,224,224,.10), transparent 60%),
+    radial-gradient(900px 700px at 92% 8%, rgba(139,108,246,.11), transparent 60%),
+    radial-gradient(1000px 700px at 50% 115%, rgba(96,165,250,.07), transparent 60%);
+}
+body::after{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:64px 64px;
+  -webkit-mask-image:radial-gradient(80% 70% at 50% 40%,#000,transparent 85%);
+          mask-image:radial-gradient(80% 70% at 50% 40%,#000,transparent 85%);
+  opacity:.18;
+}
+
+/* ============ deck / slides ============ */
+.deck{position:fixed;inset:0;z-index:1}
+.slide{
+  position:absolute; inset:0; display:none;
+  padding-block:clamp(28px,4.4vh,56px) clamp(74px,9vh,96px);
+  padding-inline:max(clamp(28px,5vw,88px), calc((100% - 1240px) / 2));
+  flex-direction:column; justify-content:center; align-items:flex-start;
+  container-type:inline-size;
+}
+.slide.active{display:flex}
+.slide > *{width:100%}
+.slide > .kicker{width:auto}
+.slide > .lead,.slide > .sub{max-width:78ch}
+
+/* entry animation */
+.slide.active .an{animation:rise .62s var(--ease) both;animation-delay:calc(var(--i,0)*70ms + 40ms)}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.slide.active .fade{animation:fade .7s var(--ease) both;animation-delay:calc(var(--i,0)*70ms + 40ms)}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.slide.active .pop{animation:pop .55s var(--ease) both;animation-delay:calc(var(--i,0)*70ms + 60ms)}
+@keyframes pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+
+/* ============ typography ============ */
+.kicker{
+  display:inline-flex;align-items:center;gap:9px;width:fit-content;
+  font:600 clamp(10px,1.05vw,12.5px)/1 var(--mono);
+  letter-spacing:.16em;text-transform:uppercase;color:var(--cy);
+  padding:7px 12px;border:1px solid rgba(60,224,224,.28);border-radius:999px;
+  background:rgba(60,224,224,.06);margin-bottom:clamp(14px,2vh,22px)
+}
+.kicker.vi{color:var(--vi);border-color:rgba(139,108,246,.3);background:rgba(139,108,246,.07)}
+.kicker.am{color:var(--am);border-color:rgba(245,165,36,.3);background:rgba(245,165,36,.07)}
+.kicker.gr{color:var(--gr);border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.07)}
+.kicker.pk{color:var(--pk);border-color:rgba(244,114,182,.3);background:rgba(244,114,182,.07)}
+
+h1{font-size:clamp(34px,5.6vw,74px);line-height:1.03;letter-spacing:-.03em;font-weight:760}
+h2{font-size:clamp(25px,3.3vw,45px);line-height:1.1;letter-spacing:-.022em;font-weight:720;margin-bottom:clamp(10px,1.6vh,18px)}
+h3{font-size:clamp(15px,1.5vw,20px);line-height:1.25;letter-spacing:-.01em;font-weight:660;margin-bottom:8px}
+.lead{font-size:clamp(15px,1.55vw,21px);line-height:1.5;color:var(--tx2);max-width:78ch}
+.sub{font-size:clamp(13px,1.2vw,16px);line-height:1.5;color:var(--tx3)}
+strong,b{color:#fff;font-weight:660}
+em{color:var(--cy);font-style:normal;font-weight:600}
+.gradtx{background:linear-gradient(100deg,var(--cy),var(--vi) 55%,var(--pk));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* ============ layout helpers ============ */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:clamp(12px,1.6vw,24px)}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(10px,1.3vw,18px)}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(9px,1.1vw,14px)}
+.g23{display:grid;grid-template-columns:1.15fr .85fr;gap:clamp(14px,2vw,30px);align-items:center}
+.gap{margin-top:clamp(12px,2vh,22px)}
+.gap2{margin-top:clamp(18px,3vh,32px)}
+.stack{display:flex;flex-direction:column;gap:clamp(8px,1.1vh,14px)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+@container (max-width:820px){.g2,.g3,.g4,.g23{grid-template-columns:1fr}}
+
+/* ============ cards ============ */
+.card{
+  background:linear-gradient(170deg,var(--panel),var(--bg2));
+  border:1px solid var(--line);border-radius:var(--r);
+  padding:clamp(13px,1.5vw,20px);position:relative;overflow:hidden
+}
+.card.hl{border-color:rgba(60,224,224,.34);box-shadow:0 0 0 1px rgba(60,224,224,.07),0 18px 46px -26px rgba(60,224,224,.5)}
+.card.vi{border-color:rgba(139,108,246,.34)}
+.card.gr{border-color:rgba(74,222,128,.3)}
+.card.rd{border-color:rgba(251,113,133,.3)}
+.card.am{border-color:rgba(245,165,36,.32)}
+.card > .n{
+  position:absolute;top:10px;right:14px;font:700 clamp(22px,2.4vw,34px)/1 var(--mono);
+  color:var(--line2);opacity:.75
+}
+.card p{font-size:clamp(12.5px,1.15vw,15.5px);line-height:1.5;color:var(--tx2)}
+.card .t{font-size:clamp(13.5px,1.3vw,17px);font-weight:660;color:#fff;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.ico{width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;background:rgba(60,224,224,.12);color:var(--cy);font:700 13px/1 var(--mono)}
+.ico.vi{background:rgba(139,108,246,.14);color:var(--vi)}
+.ico.gr{background:rgba(74,222,128,.13);color:var(--gr)}
+.ico.am{background:rgba(245,165,36,.13);color:var(--am)}
+.ico.rd{background:rgba(251,113,133,.13);color:var(--rd)}
+.ico.pk{background:rgba(244,114,182,.13);color:var(--pk)}
+.ico.bl{background:rgba(96,165,250,.13);color:var(--bl)}
+
+/* ============ lists ============ */
+ul.ls{list-style:none;display:flex;flex-direction:column;gap:clamp(7px,1vh,12px)}
+ul.ls li{
+  position:relative;padding-left:26px;font-size:clamp(13px,1.25vw,17px);line-height:1.48;color:var(--tx2)
+}
+ul.ls li::before{
+  content:"";position:absolute;left:4px;top:.56em;width:7px;height:7px;border-radius:2px;
+  background:var(--cy);transform:rotate(45deg);box-shadow:0 0 12px rgba(60,224,224,.55)
+}
+ul.ls.vi li::before{background:var(--vi);box-shadow:0 0 12px rgba(139,108,246,.5)}
+ul.ok li::before,li.ok::before{background:var(--gr)!important;box-shadow:0 0 12px rgba(74,222,128,.5)!important}
+ul.no li::before,li.no::before{background:var(--rd)!important;box-shadow:0 0 12px rgba(251,113,133,.5)!important}
+.num{counter-reset:s;list-style:none;display:flex;flex-direction:column;gap:clamp(7px,1vh,12px)}
+.num li{counter-increment:s;position:relative;padding-left:40px;font-size:clamp(13px,1.25vw,17px);line-height:1.45;color:var(--tx2)}
+.num li::before{
+  content:counter(s);position:absolute;left:0;top:-1px;width:26px;height:26px;border-radius:8px;
+  display:grid;place-items:center;font:700 12px/1 var(--mono);color:var(--cy);
+  background:rgba(60,224,224,.1);border:1px solid rgba(60,224,224,.25)
+}
+
+/* ============ stats ============ */
+.stat{text-align:left}
+.stat .v{font:760 clamp(26px,3.5vw,50px)/1 var(--sans);letter-spacing:-.035em;color:#fff}
+.stat .v.cy{color:var(--cy)} .stat .v.vi{color:var(--vi)} .stat .v.gr{color:var(--gr)}
+.stat .v.am{color:var(--am)} .stat .v.rd{color:var(--rd)}
+.stat .l{font-size:clamp(11px,1.02vw,13.5px);color:var(--tx3);margin-top:6px;line-height:1.35}
+
+/* ============ code ============ */
+pre,code{font-family:var(--mono)}
+pre{
+  background:#070b12;border:1px solid var(--line);border-radius:12px;
+  padding:clamp(11px,1.3vw,17px);font-size:clamp(10.5px,1.02vw,14px);line-height:1.62;
+  overflow:auto;color:#cfe0f2;white-space:pre
+}
+pre::-webkit-scrollbar{height:8px;width:8px}
+pre::-webkit-scrollbar-thumb{background:var(--line2);border-radius:8px}
+.c-k{color:var(--vi)} .c-s{color:var(--gr)} .c-c{color:#53627a;font-style:italic}
+.c-a{color:var(--cy)} .c-n{color:var(--am)} .c-r{color:var(--rd)} .c-p{color:var(--pk)}
+code.inl{background:rgba(60,224,224,.09);border:1px solid rgba(60,224,224,.18);color:var(--cy);
+  padding:1px 6px;border-radius:6px;font-size:.9em;white-space:nowrap}
+
+/* ============ pills / tags ============ */
+.pill{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--line2);background:var(--panel);color:var(--tx2);
+  font:600 clamp(10.5px,1vw,13px)/1.2 var(--mono)
+}
+.pill.cy{border-color:rgba(60,224,224,.35);color:var(--cy);background:rgba(60,224,224,.07)}
+.pill.vi{border-color:rgba(139,108,246,.35);color:var(--vi);background:rgba(139,108,246,.07)}
+.pill.gr{border-color:rgba(74,222,128,.32);color:var(--gr);background:rgba(74,222,128,.07)}
+.pill.am{border-color:rgba(245,165,36,.34);color:var(--am);background:rgba(245,165,36,.07)}
+.pill.rd{border-color:rgba(251,113,133,.34);color:var(--rd);background:rgba(251,113,133,.07)}
+
+/* ============ table ============ */
+table.tbl{width:100%;border-collapse:collapse;font-size:clamp(12px,1.15vw,15.5px)}
+table.tbl th{
+  text-align:left;padding:9px 12px;color:var(--tx3);font:600 clamp(10px,.95vw,12px)/1 var(--mono);
+  letter-spacing:.11em;text-transform:uppercase;border-bottom:1px solid var(--line2)
+}
+table.tbl td{padding:clamp(8px,1.05vh,13px) 12px;border-bottom:1px solid var(--line);color:var(--tx2);vertical-align:top}
+table.tbl tr:last-child td{border-bottom:0}
+table.tbl td:first-child{color:#fff;font-weight:620}
+table.tbl .mono{font-family:var(--mono);font-size:.93em}
+
+/* ============ bars ============ */
+.bars{display:flex;flex-direction:column;gap:clamp(7px,1vh,11px)}
+.bar{display:grid;grid-template-columns:minmax(120px,1.4fr) 1fr auto;gap:12px;align-items:center}
+.bar .bn{font:600 clamp(11px,1.05vw,14px)/1.3 var(--mono);color:var(--tx2)}
+.bar .bt{height:clamp(14px,1.7vh,20px);background:#070b12;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.bar .bf{height:100%;border-radius:5px;transform-origin:left;transform:scaleX(0);
+  background:linear-gradient(90deg,var(--cy),var(--bl))}
+.slide.active .bar .bf{animation:grow .9s var(--ease) both;animation-delay:calc(var(--i,0)*90ms + 180ms)}
+@keyframes grow{to{transform:scaleX(1)}}
+.bar .bf.vi{background:linear-gradient(90deg,var(--vi),var(--pk))}
+.bar .bf.gr{background:linear-gradient(90deg,var(--gr),#22d3ee)}
+.bar .bf.rd{background:linear-gradient(90deg,var(--rd),var(--am))}
+.bar .bv{font:700 clamp(11px,1.05vw,14px)/1 var(--mono);color:#fff;min-width:74px;text-align:right}
+
+/* ============ SVG diagrams ============ */
+svg.dia{width:100%;height:auto;display:block;overflow:visible}
+svg.dia text{font-family:var(--sans);fill:var(--tx2)}
+svg.dia .lbl{font:600 13px/1 var(--sans);fill:#fff}
+svg.dia .sml{font:500 11px/1 var(--mono);fill:var(--tx3)}
+svg.dia .box{fill:var(--panel);stroke:var(--line2);stroke-width:1.5;rx:12}
+svg.dia .flow{fill:none;stroke:var(--cy);stroke-width:2;stroke-linecap:round;
+  stroke-dasharray:var(--len,300);stroke-dashoffset:var(--len,300)}
+.slide.active svg.dia .flow{animation:draw .9s var(--ease) both;animation-delay:calc(var(--d,0ms) + 220ms)}
+@keyframes draw{to{stroke-dashoffset:0}}
+.slide.active svg.dia .node{animation:pop .5s var(--ease) both;animation-delay:calc(var(--d,0ms) + 120ms)}
+.slide.active svg.dia .pulse{animation:pulse 2.6s ease-in-out infinite;animation-delay:1s}
+@keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
+
+/* code graph */
+svg.graphsvg{width:100%;height:auto;display:block}
+svg.graphsvg .g-edges line{stroke-width:.7;opacity:0}
+.slide.active svg.graphsvg .g-edges line{animation:fade .5s linear both;animation-delay:calc(var(--d) + 500ms);opacity:.22}
+svg.graphsvg .g-bridges path{fill:none;stroke:#fff;stroke-width:1.1;opacity:0;stroke-dasharray:3 4}
+.slide.active svg.graphsvg .g-bridges path{animation:bridge .8s var(--ease) both;animation-delay:var(--d)}
+@keyframes bridge{to{opacity:.55}}
+svg.graphsvg .g-nodes circle{opacity:0}
+.slide.active svg.graphsvg .g-nodes circle{animation:npop .45s var(--ease) both;animation-delay:calc(var(--d) + 120ms)}
+@keyframes npop{from{opacity:0;transform:scale(0)}to{opacity:.95;transform:scale(1)}}
+svg.graphsvg .g-nodes circle{transform-box:fill-box;transform-origin:center}
+svg.graphsvg .g-labels text{font:600 12px/1 var(--mono);opacity:0}
+.slide.active svg.graphsvg .g-labels text{animation:fade .6s ease both;animation-delay:1.4s;opacity:.85}
+
+/* ============ split compare ============ */
+.vs{display:grid;grid-template-columns:1fr auto 1fr;gap:clamp(10px,1.4vw,20px);align-items:stretch}
+.vs .arrow{display:grid;place-items:center;color:var(--tx3);font-size:26px}
+@container (max-width:820px){.vs{grid-template-columns:1fr}.vs .arrow{transform:rotate(90deg)}}
+
+/* ============ title slide ============ */
+.title-wrap{text-align:left}
+.title-meta{display:flex;gap:clamp(10px,1.4vw,20px);flex-wrap:wrap;margin-top:clamp(20px,3.4vh,38px)}
+
+/* ============ HUD ============ */
+.hud{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;
+  display:flex;align-items:center;gap:14px;
+  padding:9px clamp(14px,2.4vw,26px);
+  background:linear-gradient(0deg,rgba(6,8,13,.97),rgba(6,8,13,.72));
+  border-top:1px solid var(--line);backdrop-filter:blur(12px)
+}
+.hud .blk{font:600 11px/1 var(--mono);letter-spacing:.11em;text-transform:uppercase;color:var(--tx3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw}
+.hud .spacer{flex:1}
+.hud button{
+  appearance:none;background:var(--panel);border:1px solid var(--line2);color:var(--tx2);
+  border-radius:9px;padding:6px 11px;font:600 11.5px/1 var(--mono);cursor:pointer;
+  transition:.16s var(--ease);white-space:nowrap
+}
+.hud button:hover{border-color:var(--cy);color:var(--cy);background:rgba(60,224,224,.08)}
+.hud button.on{border-color:var(--cy);color:var(--cy);background:rgba(60,224,224,.12)}
+.hud .cnt{font:700 12.5px/1 var(--mono);color:#fff;min-width:64px;text-align:right}
+.hud .cnt span{color:var(--tx3);font-weight:500}
+#timer{font:700 12.5px/1 var(--mono);color:var(--tx3);min-width:86px;text-align:center}
+#timer.run{color:var(--gr)} #timer.over{color:var(--rd)}
+.progress{position:fixed;left:0;top:0;height:2px;z-index:50;background:linear-gradient(90deg,var(--cy),var(--vi));
+  transition:width .45s var(--ease);box-shadow:0 0 14px rgba(60,224,224,.65)}
+
+/* ============ notes ============ */
+#notes{
+  position:fixed;right:0;top:0;bottom:0;width:min(440px,38vw);z-index:45;
+  background:rgba(8,11,17,.985);border-left:1px solid var(--line2);
+  transform:translateX(101%);transition:transform .38s var(--ease);
+  display:flex;flex-direction:column;backdrop-filter:blur(16px)
+}
+#notes.open{transform:none}
+#notes header{padding:16px 20px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+#notes header .h{font:700 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cy)}
+#notes header .tm{margin-left:auto;font:600 11px/1 var(--mono);color:var(--tx3)}
+#notes .body{padding:16px 20px 26px;overflow:auto;font-size:14px;line-height:1.62;color:var(--tx2)}
+#notes .body h4{font:700 11px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--vi);
+  margin:18px 0 8px}
+#notes .body h4:first-child{margin-top:0}
+#notes .body ul{list-style:none;display:flex;flex-direction:column;gap:7px}
+#notes .body li{position:relative;padding-left:16px}
+#notes .body li::before{content:"–";position:absolute;left:0;color:var(--tx3)}
+#notes .body p{margin-bottom:9px}
+#notes .body code{background:rgba(60,224,224,.09);color:var(--cy);padding:1px 5px;border-radius:5px;font-size:.88em}
+#notes .body .qa{border-left:2px solid var(--am);padding-left:12px;color:var(--tx2)}
+#notes .body .qa b{color:var(--am)}
+body.notes-open .deck{padding-right:min(440px,38vw)}
+body.notes-open .slide{padding-right:calc(min(440px,38vw) + 40px)}
+body.notes-open .hud{padding-right:calc(min(440px,38vw) + 26px)}
+.notes-src{display:none}
+
+/* ============ jump list ============ */
+#jump{border:0;padding:0;background:transparent;max-width:min(960px,92vw);width:100%;color:var(--tx)}
+#jump::backdrop{background:rgba(3,5,9,.82);backdrop-filter:blur(6px)}
+#jump .wrap{background:var(--panel);border:1px solid var(--line2);border-radius:18px;padding:22px 24px;
+  max-height:82vh;overflow:auto}
+#jump h3{font:700 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cy);margin-bottom:14px}
+#jump .jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px}
+#jump button{
+  text-align:left;background:transparent;border:1px solid transparent;border-radius:9px;padding:8px 11px;
+  color:var(--tx2);font:500 13px/1.35 var(--sans);cursor:pointer;display:flex;gap:10px;transition:.14s
+}
+#jump button:hover{background:var(--panel2);border-color:var(--line2);color:#fff}
+#jump button .k{font:700 11px/1.5 var(--mono);color:var(--tx3);min-width:22px}
+#jump button.cur{border-color:var(--cy);color:var(--cy)}
+
+/* ============ help ============ */
+#help{border:0;padding:0;background:transparent;max-width:min(560px,92vw);color:var(--tx)}
+#help::backdrop{background:rgba(3,5,9,.8);backdrop-filter:blur(6px)}
+#help .wrap{background:var(--panel);border:1px solid var(--line2);border-radius:18px;padding:24px 26px}
+#help h3{font:700 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cy);margin-bottom:16px}
+#help dl{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;align-items:center;font-size:14px}
+#help dt{font:700 12px/1 var(--mono);color:#fff;background:var(--panel2);border:1px solid var(--line2);
+  border-radius:7px;padding:6px 10px;text-align:center;white-space:nowrap}
+#help dd{color:var(--tx2)}
+
+/* optional badge */
+.opt{position:absolute;top:clamp(20px,3vh,34px);right:clamp(24px,4vw,64px);z-index:5}
+body.notes-open .opt{right:calc(min(440px,38vw) + 40px)}
+
+/* ============ a11y / motion ============ */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important}
+  .slide.active .bar .bf{transform:scaleX(1)}
+  svg.dia .flow{stroke-dashoffset:0}
+  svg.graphsvg .g-nodes circle,svg.graphsvg .g-edges line,svg.graphsvg .g-labels text{opacity:.85}
+}
+::selection{background:rgba(60,224,224,.3);color:#fff}
+:focus-visible{outline:2px solid var(--cy);outline-offset:3px;border-radius:6px}
+
+/* ============ print ============ */
+@media print{
+  @page{size:A4 landscape;margin:12mm}
+  html,body{overflow:visible;background:#fff;color:#111;height:auto}
+  body::before,body::after{display:none}
+  .hud,.progress,#notes,#jump,#help,.opt{display:none!important}
+  .deck{position:static}
+  .slide{position:static!important;display:flex!important;page-break-after:always;break-after:page;
+    break-inside:avoid;min-height:0;padding:0 0 8mm!important;animation:none!important;
+    container-type:normal}
+  .slide h1{font-size:24pt!important} .slide h2{font-size:17pt!important} .slide h3{font-size:11pt!important}
+  .slide .lead{font-size:10.5pt!important} .slide .card p,.slide ul.ls li,.slide .num li{font-size:9.5pt!important}
+  .slide pre{font-size:7.5pt!important} .slide table.tbl{font-size:9pt!important}
+  .slide .stat .v{font-size:16pt!important}
+  .slide svg.dia,.slide svg.graphsvg{max-height:62mm}
+  .kicker{font-size:7pt!important;padding:3px 7px!important}
+  .slide *{animation:none!important;opacity:1!important;transform:none!important}
+  .card,pre{background:#f6f8fb!important;border-color:#ccd4e0!important;color:#111}
+  h1,h2,h3,strong,b,.card .t,table.tbl td:first-child{color:#000!important}
+  .lead,.sub,.card p,ul.ls li,.num li,table.tbl td{color:#333!important}
+  .notes-src{display:block!important;margin-top:8mm;padding:6mm;border:1px dashed #aab;border-radius:6px;
+    background:#fafbfd;font-size:10pt;color:#222}
+  .notes-src h4{font-weight:700;margin:6px 0 3px;font-size:9pt;text-transform:uppercase;letter-spacing:.08em}
+  .notes-src ul{margin-left:16px}
+  .bar .bf{transform:scaleX(1)!important}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0 L9 4.5 L0 9 z" fill="#3ce0e0"/>
+    </marker>
+    <marker id="ar-vi" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0 L9 4.5 L0 9 z" fill="#8b6cf6"/>
+    </marker>
+    <marker id="ar-rd" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0 L9 4.5 L0 9 z" fill="#fb7185"/>
+    </marker>
+  </defs>
+</svg>
+<div class="progress" id="prog" style="width:0"></div>
+<main class="deck" id="deck">
+
+<!-- ═══════════ 1. ТИТУЛ ═══════════ -->
+<section class="slide" data-block="Вступ" data-time="0:30" data-title="Титул">
+  <div class="title-wrap">
+    <div class="kicker an" style="--i:0">UPSTARS · Frontend · вересень 2026</div>
+    <h1 class="an" style="--i:1">AI-агенти в роботі:<br><span class="gradtx">Skills, MCP і контекст</span></h1>
+    <p class="lead gap an" style="--i:2">Що працює вже сьогодні, що варто спробувати завтра — і чому головна валюта агента це не токени, а увага.</p>
+    <div class="title-meta">
+      <div class="pill cy an" style="--i:3">◆ 6 блоків · 24 хв</div>
+      <div class="pill vi an" style="--i:4">◆ теорія → приклад → наша практика</div>
+      <div class="pill an" style="--i:5">◆ S — картки спікера</div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Привітання, 15 секунд. Не читати заголовок вголос.</li>
+      <li>«Я не буду продавати вам AI. Я покажу механіку: з чого складається агент, чому він тупить і що з цим робити руками.»</li>
+      <li>Одразу озвучити формат: питання можна кидати по ходу, але великі — в кінці, на них є 5 хвилин.</li>
+    </ul>
+    <h4>Таймінг</h4>
+    <ul><li>Загальний бюджет — 24 хв + 5 хв Q&amp;A. Якщо на 12-й хвилині ви ще в блоці Skills — пропускайте слайди з міткою «опційний».</li></ul>
+  </div>
+</section>
+
+<!-- ═══════════ 2. ПРОБЛЕМА + МАПА ═══════════ -->
+<section class="slide" data-block="Вступ" data-time="0:50" data-title="Проблема і мапа доповіді">
+  <div class="g23">
+    <div>
+      <div class="kicker an" style="--i:0">Знайома картина</div>
+      <h2 class="an" style="--i:1">Агент прочитав 40 файлів<br>і зробив не те</h2>
+      <ul class="ls no gap an" style="--i:2">
+        <li>Витратив пів контексту на читання того, що йому не було потрібно</li>
+        <li>Проігнорував конвенції проєкту, хоча вони написані</li>
+        <li>На третьому повідомленні «забув» те, про що домовились на першому</li>
+        <li>Зробив руками те, що детерміновано робить скрипт за 200 мс</li>
+      </ul>
+      <p class="lead gap2 an" style="--i:3">Майже завжди проблема не в моделі. Проблема в тому, <em>що саме</em> ми поклали їй у контекст — і що забули покласти.</p>
+    </div>
+    <div class="stack">
+      <div class="card hl an" style="--i:2"><div class="t"><span class="ico">1</span>Skills</div><p>Одиниця знання. Процедура, яку агент підвантажує на вимогу.</p></div>
+      <div class="card an" style="--i:3"><div class="t"><span class="ico vi">2</span>Агенти</div><p>Виконавець із власним контекстом і критерієм зупинки.</p></div>
+      <div class="card an" style="--i:4"><div class="t"><span class="ico gr">3</span>MCP</div><p>Доступ до зовнішнього світу + свій сервер-агрегатор.</p></div>
+      <div class="card an" style="--i:5"><div class="t"><span class="ico am">4</span>Jev</div><p>Нова технологія на горизонті. Дивимось, не впроваджуємо.</p></div>
+      <div class="card an" style="--i:6"><div class="t"><span class="ico pk">5</span>Токени</div><p>Як міряти і як економити, не втрачаючи якість.</p></div>
+      <div class="card an" style="--i:7"><div class="t"><span class="ico bl">6</span>Контекст проєкту</div><p>Граф коду + LLM wiki на 1000+ файлів.</p></div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Почати з болю — попросити підняти руку тих, у кого таке було. Це заходить.</li>
+      <li>Головна теза доповіді, яку повторимо ще двічі: <b>агент — це функція від контексту, а не від промпту.</b></li>
+      <li>Мапу проговорити швидко, по одному слову на блок. Не читати описи.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«А модель же стає розумнішою, це саме не вирішиться?»</b> Розмір вікна росте, але деградація якості на довгому контексті (context rot) нікуди не дівається. Чим більше сміття, тим гірше рішення — незалежно від моделі.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 3. ЧОТИРИ РІВНІ ═══════════ -->
+<section class="slide" data-block="Карта екосистеми" data-time="0:45" data-title="Чотири рівні, які плутають">
+  <div class="kicker an" style="--i:0">Карта екосистеми</div>
+  <h2 class="an" style="--i:1">Чотири рівні, які постійно плутають</h2>
+  <p class="lead an" style="--i:2">Кожен вирішує свою проблему. Більшість невдач — це спроба закрити задачу не тим рівнем.</p>
+  <div class="gap2 fade" style="--i:3">
+  <svg class="dia" viewBox="0 0 1000 250" role="img" aria-label="Пайплайн: промпт, skill, агент, MCP">
+    <g class="node" style="--d:0ms">
+      <rect class="box" x="10" y="52" width="212" height="112"/>
+      <text class="lbl" x="34" y="88">Промпт</text>
+      <text class="sml" x="34" y="112">разова інструкція</text>
+      <text class="sml" x="34" y="134" fill="#6f7f97">живе один хід</text>
+    </g>
+    <path class="flow" style="--len:38;--d:260ms" d="M228 108 L258 108" marker-end="url(#ar)"/>
+    <g class="node" style="--d:320ms">
+      <rect class="box" x="266" y="52" width="212" height="112" stroke="#3ce0e0" stroke-opacity=".5"/>
+      <text class="lbl" x="290" y="88">Skill</text>
+      <text class="sml" x="290" y="112" fill="#3ce0e0">процедура в git</text>
+      <text class="sml" x="290" y="134">живе між сесіями</text>
+    </g>
+    <path class="flow" style="--len:38;--d:580ms" d="M484 108 L514 108" marker-end="url(#ar)"/>
+    <g class="node" style="--d:640ms">
+      <rect class="box" x="522" y="52" width="212" height="112" stroke="#8b6cf6" stroke-opacity=".5"/>
+      <text class="lbl" x="546" y="88">Агент</text>
+      <text class="sml" x="546" y="112" fill="#8b6cf6">виконавець + цикл</text>
+      <text class="sml" x="546" y="134">свій контекст</text>
+    </g>
+    <path class="flow" style="--len:38;--d:900ms" d="M740 108 L770 108" marker-end="url(#ar)"/>
+    <g class="node" style="--d:960ms">
+      <rect class="box" x="778" y="52" width="212" height="112" stroke="#4ade80" stroke-opacity=".5"/>
+      <text class="lbl" x="802" y="88">MCP</text>
+      <text class="sml" x="802" y="112" fill="#4ade80">доступ до світу</text>
+      <text class="sml" x="802" y="134">Jira, Sentry, БД…</text>
+    </g>
+    <text class="sml" x="10" y="200" fill="#6f7f97">«зроби Х ось так»</text>
+    <text class="sml" x="266" y="200" fill="#6f7f97">«ось як у нас робиться Х»</text>
+    <text class="sml" x="522" y="200" fill="#6f7f97">«зроби Х сам, я почекаю»</text>
+    <text class="sml" x="778" y="200" fill="#6f7f97">«ось руки, щоб зробити Х»</text>
+  </svg>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Ключова відмінність промпта і скіла: промпт живе один хід, скіл лежить у git і працює для всієї команди.</li>
+      <li>Ключова відмінність скіла й агента: скіл — це <i>що робити</i>, агент — це <i>хто робить і в якому контексті</i>.</li>
+      <li>MCP не робить рішень взагалі. Це руки, не голова.</li>
+      <li>Типова помилка: намагатись вирішити промптом те, що має бути скілом; або зробити агента там, де вистачило б скрипта.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 4. ХТО ЗА ЩО ═══════════ -->
+<section class="slide" data-block="Карта екосистеми" data-time="0:40" data-title="Хто за що відповідає">
+  <div class="kicker an" style="--i:0">Стрижень усієї доповіді</div>
+  <h2 class="an" style="--i:1">Хто за що відповідає</h2>
+  <div class="card gap an" style="--i:2">
+    <table class="tbl">
+      <tr><th>Рівень</th><th>Відповідає за</th><th>Де живе</th><th>Чим ламається</th></tr>
+      <tr><td>Модель</td><td>Міркування, генерація</td><td class="mono">провайдер</td><td>Шумний контекст</td></tr>
+      <tr><td>Skill</td><td>Процедуру: що робити і в якому порядку</td><td class="mono">.agents/skills/</td><td>Скіл-енциклопедія</td></tr>
+      <tr><td>Агент</td><td>Виконання: свій контекст, своя модель, критерій зупинки</td><td class="mono">.claude/agents/</td><td>Агент-універсал</td></tr>
+      <tr><td>MCP</td><td>Доступ до зовнішніх систем і даних</td><td class="mono">MCP-сервер</td><td>40 тулів у кожній сесії</td></tr>
+      <tr><td>Hooks і скрипти</td><td>Детермінізм: те, що має статись завжди</td><td class="mono">scripts/ + hooks</td><td>Логіка, засунута в модель</td></tr>
+    </table>
+  </div>
+  <p class="lead gap2 an" style="--i:3">Якщо запамʼятати один слайд із доповіді — цей. Далі ми просто розкриваємо кожен рядок.</p>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Пройти по колонці «чим ламається» — це дзеркало антипатернів, які будуть далі.</li>
+      <li>Наголосити на останньому рядку: <b>детермінізм — не в модель.</b> Це найдешевша оптимізація, яка існує.</li>
+      <li>Сказати, що це слайд, до якого варто повернутись — він є у роздатці.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 5. ЩО ТАКЕ SKILL ═══════════ -->
+<section class="slide" data-block="Skills" data-time="0:50" data-title="Що таке Agent Skill">
+  <div class="kicker an" style="--i:0">Блок 1 · Skills</div>
+  <h2 class="an" style="--i:1">Skill — це пакет процедури, а не промпт</h2>
+  <div class="g2 gap">
+    <div class="stack">
+      <pre class="an" style="--i:2"><span class="c-c"># звичайна папка в репозиторії</span>
+release-notes/
+├── <span class="c-a">SKILL.md</span>        <span class="c-c">← обовʼязковий</span>
+├── references/     <span class="c-c">← глибокі деталі</span>
+│   └── format.md
+├── scripts/        <span class="c-c">← детермінізм</span>
+│   └── collect.mjs
+└── assets/         <span class="c-c">← шаблони</span>
+    └── template.md</pre>
+      <pre class="an" style="--i:3"><span class="c-c">--- SKILL.md ---</span>
+<span class="c-k">name</span>: <span class="c-s">release-notes</span>
+<span class="c-k">description</span>: <span class="c-s">Збирає release notes з git-історії</span>
+  <span class="c-s">між тегами. Використовуй на /release-notes,</span>
+  <span class="c-s">«що увійшло в реліз», «зміни з минулого разу».</span>
+<span class="c-c">---</span>
+<span class="c-p"># Release notes</span>
+1. Визнач діапазон: <span class="c-a">git describe --tags --abbrev=0</span>
+2. Запусти <span class="c-a">scripts/collect.mjs</span> …</pre>
+    </div>
+    <div class="stack">
+      <div class="card hl an" style="--i:3">
+        <div class="t"><span class="ico">→</span>Це не плагін і не код</div>
+        <p>Агент не «встановлює» скіл. Він бачить його опис і вирішує, чи читати тіло. Формат навмисно мінімальний: два обовʼязкові поля frontmatter і Markdown нижче.</p>
+      </div>
+      <div class="card an" style="--i:4">
+        <div class="t"><span class="ico vi">◆</span>Чому не CLAUDE.md / AGENTS.md</div>
+        <p>Той файл читається <b>завжди</b> і платиться в кожній сесії. Скіл читається <b>лише коли потрібен</b>. У корені — політики й конвенції, у скілах — процедури.</p>
+      </div>
+      <div class="card an" style="--i:5">
+        <div class="t"><span class="ico gr">◆</span>Чому не просто промпт</div>
+        <p>Скіл лежить у git: його ревʼюють, версіонують, він однаковий у всіх у команді й не залежить від того, хто як сформулював.</p>
+      </div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Провести аналогію: <b>скіл — це README, написаний для агента, а не для людини.</b> Імператив, без води.</li>
+      <li>Звернути увагу на description у прикладі: там навмисно є і слеш-команда, і живі фрази користувача.</li>
+      <li>Наголосити: формат мінімальний, це важливо — на нього легко перейти й важко зламати.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«А чим це відрізняється від .cursorrules?»</b> Cursor-правила прив'язані до глобів і вантажаться за шляхом файлу. Skill вантажиться за <i>наміром</i> — агент сам вирішує, що ця процедура зараз доречна. І він портативний між інструментами, про що буде окремий слайд.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 6. PROGRESSIVE DISCLOSURE ═══════════ -->
+<section class="slide" data-block="Skills" data-time="1:00" data-title="Progressive disclosure">
+  <div class="kicker an" style="--i:0">Skills · головна ідея</div>
+  <h2 class="an" style="--i:1">Progressive disclosure: платиш тільки за те, що відкрив</h2>
+  <div class="gap fade" style="--i:2">
+  <svg class="dia" viewBox="0 0 1000 300" role="img" aria-label="Три рівні розкриття скіла">
+    <g class="node" style="--d:0ms">
+      <rect class="box" x="10" y="20" width="300" height="118" stroke="#3ce0e0" stroke-opacity=".55" fill="rgba(60,224,224,.05)"/>
+      <text class="sml" x="32" y="48" fill="#3ce0e0">РІВЕНЬ 1 · ЗАВЖДИ В КОНТЕКСТІ</text>
+      <text class="lbl" x="32" y="76" font-size="15">name + description</text>
+      <text class="sml" x="32" y="100">≈ 100 токенів на скіл</text>
+      <text class="sml" x="32" y="122" fill="#6f7f97">платиш у кожній сесії</text>
+    </g>
+    <path class="flow" style="--len:60;--d:300ms" d="M160 146 L160 178" marker-end="url(#ar)"/>
+    <text class="sml" x="176" y="168" fill="#6f7f97">агент вирішив, що скіл доречний</text>
+    <g class="node" style="--d:420ms">
+      <rect class="box" x="10" y="186" width="420" height="98" stroke="#8b6cf6" stroke-opacity=".55" fill="rgba(139,108,246,.05)"/>
+      <text class="sml" x="32" y="214" fill="#8b6cf6">РІВЕНЬ 2 · ПРИ ТРИГЕРІ</text>
+      <text class="lbl" x="32" y="242" font-size="15">тіло SKILL.md</text>
+      <text class="sml" x="32" y="266">500–3000 токенів · платиш лише коли спрацював</text>
+    </g>
+    <path class="flow" style="--len:80;--d:760ms" d="M440 235 L500 235" marker-end="url(#ar)"/>
+    <g class="node" style="--d:860ms">
+      <rect class="box" x="512" y="186" width="478" height="98" stroke="#4ade80" stroke-opacity=".55" fill="rgba(74,222,128,.05)"/>
+      <text class="sml" x="534" y="214" fill="#4ade80">РІВЕНЬ 3 · НА ВИМОГУ</text>
+      <text class="lbl" x="534" y="242" font-size="15">references/ · scripts/ · assets/</text>
+      <text class="sml" x="534" y="266">скільки завгодно · читається тільки потрібний файл</text>
+    </g>
+    <g class="node" style="--d:1000ms">
+      <rect class="box" x="512" y="20" width="478" height="118" fill="rgba(245,165,36,.05)" stroke="#f5a524" stroke-opacity=".4"/>
+      <text class="sml" x="534" y="48" fill="#f5a524">ЧОМУ ЦЕ ПРАЦЮЄ</text>
+      <text class="sml" x="534" y="76" fill="#a7b4c8">30 скілів × 100 токенів = 3 000 завжди.</text>
+      <text class="sml" x="534" y="98" fill="#a7b4c8">30 скілів × 2 000 токенів = 60 000 — це вже</text>
+      <text class="sml" x="534" y="120" fill="#a7b4c8">третина вікна, з'їдена до першого питання.</text>
+    </g>
+  </svg>
+  </div>
+  <p class="lead gap an" style="--i:4">Це той самий lazy loading, до якого ми звикли у фронті. Тільки бюджет тут не кілобайти, а <em>увага моделі</em>.</p>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Це найважливіший слайд блоку. Не поспішати.</li>
+      <li>Аналогія з фронтом заходить: «уявіть, що ви імпортуєте весь lodash у кожен компонент».</li>
+      <li>Головний висновок для автора скіла: <b>кожен рядок у SKILL.md — це рядок, який хтось прочитає, навіть якщо він йому не потрібен.</b></li>
+      <li>Рівень 3 — це те, що більшість не використовує. А саме там має лежати 80% обсягу.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«Звідки цифра 100 токенів?»</b> Це name + description із frontmatter, які інструмент кладе в системний промпт. Далі на слайді про бюджет буде реальний вимір з нашого репозиторію: 11 скілів + 6 агентів + 2 команди = близько 1 450 токенів описів.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 7. DESCRIPTION = ТРИГЕР ═══════════ -->
+<section class="slide" data-block="Skills" data-time="0:50" data-title="Description — це тригер">
+  <div class="kicker an" style="--i:0">Skills · найчастіша помилка</div>
+  <h2 class="an" style="--i:1">Description — це не опис. Це тригер</h2>
+  <p class="lead an" style="--i:2">Єдине, що агент бачить до того, як вирішити читати скіл. Якщо тут немає слів, якими користувач формулює задачу — скіл не спрацює ніколи.</p>
+  <div class="vs gap2">
+    <div class="card rd an" style="--i:3">
+      <div class="t"><span class="ico rd">✕</span>Так не працює</div>
+      <pre style="margin-top:10px"><span class="c-k">description</span>: <span class="c-r">Скіл для роботи</span>
+  <span class="c-r">з тестами.</span></pre>
+      <p style="margin-top:10px">Немає тригерних слів. Немає назв інструментів. Немає фраз, якими люди реально просять. Агент не знає, коли це доречно — і не відкриває.</p>
+    </div>
+    <div class="arrow an" style="--i:4">→</div>
+    <div class="card gr an" style="--i:5">
+      <div class="t"><span class="ico gr">✓</span>А так працює</div>
+      <pre style="margin-top:10px"><span class="c-k">description</span>: <span class="c-s">Пише unit-тести</span>
+  <span class="c-s">для composables і класів-моделей</span>
+  <span class="c-s">на Vitest. Використовуй на</span>
+  <span class="c-s">/write-tests, «покрий тестами»,</span>
+  <span class="c-s">«напиши тест на useApi»,</span>
+  <span class="c-s">«додай кейс на цю помилку».</span></pre>
+      <p style="margin-top:10px">Що робить + для чого + якими словами про це просять.</p>
+    </div>
+  </div>
+  <div class="g3 gap2">
+    <div class="card an" style="--i:6"><p><b>Клади всередину:</b> назви фреймворків (Vitest, Playwright), типи артефактів (junit, trace), дієслова дії (покрий, знайди, проаналізуй).</p></div>
+    <div class="card an" style="--i:7"><p><b>Клади синоніми й мову команди.</b> У нас у descriptions свідомо є російські й українські формулювання — бо люди так і питають.</p></div>
+    <div class="card an" style="--i:8"><p><b>Ліміт — 1024 символи.</b> Це багато. Використай їх: це найдешевші токени у всій системі.</p></div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Розповісти історію: скіл написаний ідеально, але не тригериться — і людина вирішує, що «скіли не працюють».</li>
+      <li>Правило великого пальця: напиши description і дай колезі. Якщо він не зрозумів, коли це викликається — агент теж не зрозуміє.</li>
+      <li>Це єдине місце, де багатослівність корисна. Скрізь інде — навпаки.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«А можна змусити викликати примусово?»</b> Слеш-командою — так. Але це вже не автоматизація, а ручний виклик. Мета — щоб скіл підхоплювався сам.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 8. ЧЕКЛИСТ АВТОРА ═══════════ -->
+<section class="slide" data-block="Skills" data-time="0:50" data-title="Чеклист автора скіла">
+  <div class="kicker an" style="--i:0">Skills · як писати</div>
+  <h2 class="an" style="--i:1">Сім правил, які роблять скіл робочим</h2>
+  <div class="g2 gap">
+    <ol class="num">
+      <li class="an" style="--i:2"><b>Імператив, не наратив.</b> «Запусти X. Перевір Y. Якщо Z — зупинись.» Не «зазвичай ми робимо так, бо історично…».</li>
+      <li class="an" style="--i:3"><b>Одна процедура = один скіл.</b> Якщо в назві зʼявилось «і» — це два скіли.</li>
+      <li class="an" style="--i:4"><b>≤ 500 рядків у SKILL.md.</b> Вилізло більше — значить, частина мала бути в <code class="inl">references/</code>.</li>
+      <li class="an" style="--i:5"><b>Дерева рішень — у references.</b> Основний файл лишає маршрут, деталі читаються за потреби.</li>
+    </ol>
+    <ol class="num" start="5" style="counter-reset:s 4">
+      <li class="an" style="--i:6"><b>Детермінізм — у scripts.</b> Усе, що можна порахувати кодом, має рахувати код. Модель дорога й недетермінована.</li>
+      <li class="an" style="--i:7"><b>Приклади входу й виходу.</b> Один хороший приклад економить абзац пояснень і дає модель формату.</li>
+      <li class="an" style="--i:8"><b>Живе в git.</b> Ревʼю, версія, історія змін. Скіл, який лежить у когось локально — це не скіл, а нотатка.</li>
+    </ol>
+  </div>
+  <div class="card am gap2 an" style="--i:9">
+    <div class="t"><span class="ico am">!</span>Тест на якість скіла</div>
+    <p>Дай його новому джуну без пояснень. Якщо він виконає процедуру правильно з першого разу — скіл готовий. Якщо перепитає «а що мається на увазі тут» — саме там модель теж помилиться.</p>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Правило 5 — найважливіше й найчастіше ігнороване. Приклад: «порахуй, скільки файлів змінилось» — це <code>git diff --name-only | wc -l</code>, а не робота моделі.</li>
+      <li>Правило 7 має соціальний бік: скіл у git означає, що знання команди перестає бути в голові однієї людини.</li>
+      <li>«Тест на джуна» — озвучити обовʼязково, це найзапамʼятовуваніша частина слайда.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 9. ПРИКЛАД У ВАКУУМІ ═══════════ -->
+<section class="slide" data-block="Skills" data-time="0:55" data-title="Приклад у вакуумі: release-notes">
+  <div class="kicker gr an" style="--i:0">Приклад у вакуумі</div>
+  <h2 class="an" style="--i:1">Збираємо скіл <span class="gradtx">release-notes</span> з нуля</h2>
+  <p class="lead an" style="--i:2">Нейтральна задача, яка є в будь-якому проєкті. Питання одне: що куди покласти.</p>
+  <div class="g3 gap2">
+    <div class="card hl an" style="--i:3">
+      <div class="t"><span class="ico">L1</span>frontmatter</div>
+      <pre style="margin-top:8px"><span class="c-k">name</span>: <span class="c-s">release-notes</span>
+<span class="c-k">description</span>: <span class="c-s">Формує</span>
+ <span class="c-s">release notes між тегами</span>
+ <span class="c-s">з conventional commits.</span>
+ <span class="c-s">/release-notes, «що</span>
+ <span class="c-s">увійшло в реліз».</span></pre>
+      <p style="margin-top:10px"><b>~60 токенів.</b> Висить завжди. Тут тільки «що» і «коли».</p>
+    </div>
+    <div class="card vi an" style="--i:4">
+      <div class="t"><span class="ico vi">L2</span>SKILL.md</div>
+      <pre style="margin-top:8px"><span class="c-p">## Кроки</span>
+1. <span class="c-a">node scripts/collect.mjs</span>
+   <span class="c-c">→ поверне JSON комітів</span>
+2. Згрупуй за типом
+   (feat / fix / perf)
+3. Формат — у
+   <span class="c-a">references/format.md</span>
+4. Питай про breaking
+   changes перед публікацією</pre>
+      <p style="margin-top:10px"><b>~250 токенів.</b> Маршрут, не інструкція з усіма випадками.</p>
+    </div>
+    <div class="card gr an" style="--i:5">
+      <div class="t"><span class="ico gr">L3</span>references + scripts</div>
+      <pre style="margin-top:8px"><span class="c-a">references/format.md</span>
+ <span class="c-c">приклади для кожного</span>
+ <span class="c-c">типу, тон, шаблон MR</span>
+
+<span class="c-a">scripts/collect.mjs</span>
+ <span class="c-c">git log, парсинг,</span>
+ <span class="c-c">фільтр merge-комітів,</span>
+ <span class="c-c">JSON на вихід</span></pre>
+      <p style="margin-top:10px"><b>0 токенів,</b> поки не знадобились. Скрипт — взагалі не токени.</p>
+    </div>
+  </div>
+  <div class="card gap2 an" style="--i:6">
+    <p><b>Межа проходить так:</b> у SKILL.md — рішення, які має ухвалити модель. У references — довідка, потрібна не завжди. У scripts — усе, де немає рішень, а є обчислення. Якщо крок можна описати словом «порахуй», «знайди», «розпарси» — це скрипт.</p>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Провести залу по трьох рівнях повільно: «а це ми куди покладемо? а це?»</li>
+      <li>Питання до залу (риторичне): «Куди покласти список наших типів комітів?» → references, бо він великий і потрібен не завжди.</li>
+      <li>Наголосити фразу-критерій: <b>«порахуй / знайди / розпарси» = скрипт.</b></li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«А якщо скрипт складний, це ж теж підтримка?»</b> Так. Але детермінований скрипт ти пишеш і тестуєш один раз, а модель робить це заново в кожній сесії — і кожного разу трохи інакше.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 10. OPEN STANDARD ═══════════ -->
+<section class="slide" data-block="Skills · портативність" data-time="1:00" data-title="Agent Skills — відкритий стандарт">
+  <div class="kicker vi an" style="--i:0">Куди ми хочемо рухатись</div>
+  <h2 class="an" style="--i:1">Універсальні скіли: один стандарт, 32+ інструменти</h2>
+  <div class="g23 gap">
+    <div>
+      <p class="lead an" style="--i:2">Специфікацію <b>Agent Skills</b> опублікували в грудні 2025. За 48 годин її підтримали OpenAI і Microsoft. Сьогодні її читають Claude Code, Codex CLI, Gemini CLI, Cursor, Kiro та ще десятки інструментів.</p>
+      <p class="lead gap an" style="--i:3">Для нас це означає одне: скіл можна писати <em>не під конкретну модель</em>. Правильно написаний скіл переживе зміну інструменту — а інструменти в цій галузі змінюються швидше, ніж наші проєкти.</p>
+      <div class="g2 gap2">
+        <div class="stat an" style="--i:4"><div class="v cy">2</div><div class="l">обовʼязкові поля frontmatter — і все</div></div>
+        <div class="stat an" style="--i:5"><div class="v vi">32+</div><div class="l">інструменти читають цей формат</div></div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card hl an" style="--i:4">
+        <div class="t"><span class="ico">◆</span>Мінімальний контракт</div>
+        <pre style="margin-top:8px"><span class="c-k">name</span>: <span class="c-s">release-notes</span>
+ <span class="c-c">≤64 символи, lowercase,</span>
+ <span class="c-c">дефіси, збігається з папкою</span>
+<span class="c-k">description</span>: <span class="c-s">…</span>
+ <span class="c-c">≤1024 символи</span></pre>
+      </div>
+      <div class="card an" style="--i:5">
+        <div class="t"><span class="ico gr">◆</span>Де лежать командні скіли</div>
+        <p>У репозиторії, у <code class="inl">.agents/skills/</code> — нейтральна папка стандарту, а не папка конкретного вендора. Кожен інструмент знає, де шукати.</p>
+      </div>
+      <div class="card an" style="--i:6">
+        <div class="t"><span class="ico am">◆</span>Валідація</div>
+        <pre style="margin-top:8px"><span class="c-a">npx skills-ref validate ./my-skill</span></pre>
+      </div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Це слайд про стратегію, не про синтаксис. Головна думка: <b>ми не хочемо прив'язуватись до одного вендора.</b></li>
+      <li>Реальність галузі: інструмент, яким ви користуєтесь сьогодні, може бути не найкращим через рік. Скіли — це актив, який має пережити цю зміну.</li>
+      <li>Згадати, що в <code>cardona-core-service</code> уже є папка <code>.agents/skills/</code> — ми вже зробили перший крок, просто ще не всюди.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«Тобто скіл гарантовано працюватиме однаково скрізь?»</b> Ні. Стандартизований <i>пакет</i>: структура, frontmatter, порядок розкриття. Шляхи встановлення, модель прав і спосіб виклику лишаються різними. Тому наступний слайд — про те, що саме ламає портативність.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 11. ЩО ЛАМАЄ ПОРТАТИВНІСТЬ ═══════════ -->
+<section class="slide" data-block="Skills · портативність" data-time="1:00" data-title="Що ламає портативність">
+  <div class="kicker vi an" style="--i:0">Skills · портативність</div>
+  <h2 class="an" style="--i:1">Що ламає портативність — і чим це замінити</h2>
+  <div class="g2 gap">
+    <div class="card rd an" style="--i:2">
+      <div class="t"><span class="ico rd">✕</span>Привʼязує до одного інструменту</div>
+      <ul class="ls no" style="margin-top:12px">
+        <li>Вендорні поля frontmatter: <code class="inl">context: fork</code>, <code class="inl">when_to_use</code>, <code class="inl">user-invocable</code>, <code class="inl">disable-model-invocation</code></li>
+        <li>Продуктові дієслова: «відкрий панель X», «натисни кнопку Y»</li>
+        <li>Абсолютні шляхи й припущення про конкретний раннер чи структуру папок</li>
+        <li>Форк скіла під кожен інструмент — далі вони розʼїжджаються назавжди</li>
+      </ul>
+    </div>
+    <div class="card gr an" style="--i:3">
+      <div class="t"><span class="ico gr">✓</span>Працює скрізь</div>
+      <ul class="ls ok" style="margin-top:12px">
+        <li>Умовні формулювання: «якщо інструмент підтримує вкладення — додай скріншот»</li>
+        <li>Тонкі адаптери під конкретний інструмент (<code class="inl">agents/openai.yaml</code>) — хто не знає формату, той просто ігнорує файл</li>
+        <li>Відносні шляхи всередині пакета скіла</li>
+        <li>Критичні політики продубльовані в <code class="inl">AGENTS.md</code> — щоб агент бачив їх навіть коли скіл не спрацював</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card am gap2 an" style="--i:4">
+    <div class="t"><span class="ico am">✓</span>Чеклист: перш ніж назвати скіл портативним — прогнати у двох інструментах</div>
+    <div class="row" style="margin-top:12px">
+      <div class="pill cy">1 · discovery — скіл видно в каталозі</div>
+      <div class="pill cy">2 · activation — тіло вантажиться на реальному промпті</div>
+      <div class="pill cy">3 · references — лінковані файли доступні</div>
+      <div class="pill cy">4 · scripts — виконуються під реальною моделлю прав</div>
+      <div class="pill cy">5 · output — якість збігається з очікуваною</div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Найпідступніший пункт — вендорні поля. Вони зручні, і саме тому їх ставлять не думаючи.</li>
+      <li>Правило: <b>хочеш вендорну фічу — винеси її в адаптер, не в SKILL.md.</b></li>
+      <li>Пункт про AGENTS.md важливий: безпекові й критичні правила не можна ховати тільки в скіл, бо скіл може не спрацювати.</li>
+      <li>Чеклист із 5 пунктів — реальна робота на 15 хвилин, не теорія.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«А наші скіли зараз портативні?»</b> Частково. Структура й progressive disclosure — так. Але є прив'язки до конкретних сабагентів і до нашого харнесу. Це наш план: винести спільну частину в <code>.agents/skills/</code>, а вендорне — в адаптери.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 12. НАШ ПРИКЛАД ═══════════ -->
+<section class="slide" data-block="Skills · наша практика" data-time="1:05" data-title="Як це в нас: impact-analysis">
+  <div class="kicker am an" style="--i:0">Як це в нас · один із прикладів</div>
+  <h2 class="an" style="--i:1">Скіл <span class="gradtx">impact-analysis</span>: чотири файли, чотири різні ролі</h2>
+  <div class="g4 gap">
+    <div class="card hl an" style="--i:2">
+      <div class="t" style="font-size:14px"><span class="ico">L2</span>SKILL.md</div>
+      <div class="stat" style="margin:10px 0 6px"><div class="v cy" style="font-size:clamp(20px,2.2vw,30px)">4.2 КБ</div></div>
+      <p>Тільки маршрутизація для головного асистента: запустити сабагента, передати звіт дослівно, запропонувати запис у Jira.</p>
+    </div>
+    <div class="card vi an" style="--i:3">
+      <div class="t" style="font-size:14px"><span class="ico vi">L3</span>playbook.md</div>
+      <div class="stat" style="margin:10px 0 6px"><div class="v vi" style="font-size:clamp(20px,2.2vw,30px)">9.6 КБ</div></div>
+      <p>Інструкції для воркера. Головний асистент їх <b>ніколи не читає</b> — їх читає сабагент у своєму контексті.</p>
+    </div>
+    <div class="card an" style="--i:4">
+      <div class="t" style="font-size:14px"><span class="ico bl">L3</span>cardona-map.md</div>
+      <div class="stat" style="margin:10px 0 6px"><div class="v" style="font-size:clamp(20px,2.2vw,30px)">14 КБ</div></div>
+      <p>Карта розділів беку: шлях у меню, URL, що там перевіряти. Довідка — вантажиться за потреби.</p>
+    </div>
+    <div class="card gr an" style="--i:5">
+      <div class="t" style="font-size:14px"><span class="ico gr">—</span>collect-evidence.mjs</div>
+      <div class="stat" style="margin:10px 0 6px"><div class="v gr" style="font-size:clamp(20px,2.2vw,30px)">28 КБ</div></div>
+      <p>Детермінований збір діфа й доказів. <b>Нуль токенів</b> — це просто код, який виконується.</p>
+    </div>
+  </div>
+  <div class="card gap2 an" style="--i:6">
+    <div class="t"><span class="ico am">◆</span>Два правила вартості, які ми записали в CLAUDE.md</div>
+    <div class="g2" style="margin-top:12px;gap:18px">
+      <p><b>1. У SKILL.md — тільки те, що потрібно головному асистенту.</b> Усе для воркера — в <code class="inl">references/playbook.md</code>. Інакше дорога модель платить за весь плейбук, а сабагент платить за нього вдруге.</p>
+      <p><b>2. Детермінована робота — у скрипт, не в модель.</b> Саме для цього існують <code class="inl">permissions-add.mjs</code>, <code class="inl">section-scaffold.mjs</code> і <code class="inl">collect-evidence.mjs</code>.</p>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Це ілюстрація до попередніх слайдів, не самоціль. Показати, що теорія прикладається до реального коду.</li>
+      <li>Найцікавіша цифра: 28 КБ скрипта — це нуль токенів. Якби це робила модель, це була б найдорожча частина скіла.</li>
+      <li>Правило №1 — про подвійну оплату. Проговорити повільно, воно неочевидне: контент, покладений не туди, оплачується двічі.</li>
+      <li>Сказати чесно: ми прийшли до цих правил не одразу, а після того, як поміряли бюджет.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«Звіт українською, а спілкування російською — навіщо?»</b> Звіт іде в Jira для мануальних QA, у них робоча мова звітів українська. Це приклад того, що в скіл треба класти й такі домовленості — інакше кожен раз буде по-різному.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 13. АНТИПАТЕРНИ СКІЛІВ ═══════════ -->
+<section class="slide" data-block="Skills" data-time="0:45" data-title="Антипатерни скілів">
+  <div class="kicker an" style="--i:0">Skills · чого не робити</div>
+  <h2 class="an" style="--i:1">Пʼять способів зіпсувати хороший скіл</h2>
+  <div class="g2 gap">
+    <div class="stack">
+      <div class="card rd an" style="--i:2"><div class="t"><span class="ico rd">1</span>Скіл-енциклопедія</div><p>Усе в одному SKILL.md «щоб не шукати». Результат: модель платить за все одразу і губиться в тому, що їй зараз не потрібно.</p></div>
+      <div class="card rd an" style="--i:3"><div class="t"><span class="ico rd">2</span>Дублювання AGENTS.md</div><p>Конвенції, які й так читаються завжди, переписані ще й у скіл. Оплачується двічі, розʼїжджається при першій же зміні.</p></div>
+      <div class="card rd an" style="--i:4"><div class="t"><span class="ico rd">3</span>Скіл, який не тригериться</div><p>Написаний ідеально, description порожній. Живе в репозиторії, не працює ніколи. Найпоширеніший випадок.</p></div>
+    </div>
+    <div class="stack">
+      <div class="card rd an" style="--i:5"><div class="t"><span class="ico rd">4</span>Форк під кожен інструмент</div><p>Три копії одного скіла під три тули. Через місяць вони різні, і ніхто не знає, яка з них правильна.</p></div>
+      <div class="card rd an" style="--i:6"><div class="t"><span class="ico rd">5</span>Важкий зовнішній скіл без перевірки</div><p>Поставили «бо корисний» і забули поміряти.</p></div>
+      <div class="card am an" style="--i:7">
+        <div class="t"><span class="ico am">!</span>Наш живий приклад №5</div>
+        <p>Зовнішній <code class="inl">skill-creator</code> у нашому репозиторії — <b>11 171 токен</b> on-trigger. Це найдорожчий скіл у проєкті, і потрібен він рівно тоді, коли ти пишеш новий скіл. Тобто майже ніколи.</p>
+        <p style="margin-top:8px;color:var(--am)"><b>Висновок:</b> зовнішні скіли теж треба міряти. Ми повернемось до цієї цифри в блоці про токени.</p>
+      </div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Пункт 5 — навмисний місток у блок про токени. Сказати: «запамʼятайте цифру 11 171, ми до неї повернемось».</li>
+      <li>Чесність тут важлива: ми самі притягли цей скіл і самі його не поміряли. Це нормально — ненормально не міряти взагалі.</li>
+      <li>Пункт 2 — типовий для команд, які щойно почали: люди про всяк випадок дублюють конвенції всюди.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 14. ЧАТ / WORKFLOW / АГЕНТ ═══════════ -->
+<section class="slide" data-block="Агенти" data-time="0:45" data-title="Чат / workflow / агент">
+  <div class="kicker vi an" style="--i:0">Блок 2 · Агенти</div>
+  <h2 class="an" style="--i:1">Чат, workflow і агент — різниця в одному питанні</h2>
+  <p class="lead an" style="--i:2">Хто вирішує, який крок буде наступним?</p>
+  <div class="g3 gap2">
+    <div class="card an" style="--i:3">
+      <div class="t"><span class="ico">◆</span>Чат</div>
+      <p style="margin-bottom:10px"><b>Вирішує людина.</b> Ти питаєш — модель відповідає. Один хід, один результат.</p>
+      <div class="pill">крок = 1</div>
+      <p style="margin-top:12px;color:var(--tx3)">Добре для: пояснити, згенерувати шматок, обговорити варіант.</p>
+    </div>
+    <div class="card an" style="--i:4">
+      <div class="t"><span class="ico bl">◆</span>Workflow</div>
+      <p style="margin-bottom:10px"><b>Вирішує код.</b> Кроки прописані заздалегідь, модель викликається на конкретних етапах.</p>
+      <div class="pill">кроки фіксовані</div>
+      <p style="margin-top:12px;color:var(--tx3)">Добре для: повторюваних конвеєрів, де шлях відомий наперед.</p>
+    </div>
+    <div class="card hl an" style="--i:5">
+      <div class="t"><span class="ico vi">◆</span>Агент</div>
+      <p style="margin-bottom:10px"><b>Вирішує модель.</b> LLM у циклі з інструментами і явною умовою зупинки.</p>
+      <div class="pill vi">кроки невідомі наперед</div>
+      <p style="margin-top:12px;color:var(--tx3)">Добре для: задач, де шлях залежить від того, що знайдеться по дорозі.</p>
+    </div>
+  </div>
+  <div class="card gap2 an" style="--i:6">
+    <p><b>Практичний висновок:</b> агент коштує дорожче й поводиться менш передбачувано. Якщо шлях відомий наперед — робіть workflow або скрипт. Агент виправданий там, де кроки не можна прописати, бо вони залежать від проміжних знахідок.</p>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Це слайд-фільтр: більшість «агентів», які люди роблять, насправді мали бути workflow.</li>
+      <li>Приклад агентної задачі: «знайди, чому падає цей тест». Шлях невідомий — залежить від того, що покаже перший запуск.</li>
+      <li>Приклад НЕ агентної: «згенеруй CRUD за шаблоном». Кроки відомі — це скрипт плюс модель на одному етапі.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 15. АНАТОМІЯ АГЕНТА ═══════════ -->
+<section class="slide" data-block="Агенти" data-time="0:55" data-title="Анатомія агента">
+  <div class="kicker vi an" style="--i:0">Агенти · механіка</div>
+  <h2 class="an" style="--i:1">Що насправді відбувається всередині</h2>
+  <div class="gap fade" style="--i:2">
+  <svg class="dia" viewBox="0 0 1000 290" role="img" aria-label="Цикл роботи агента">
+    <g class="node" style="--d:0ms">
+      <rect class="box" x="8" y="40" width="176" height="96" fill="rgba(139,108,246,.06)" stroke="#8b6cf6" stroke-opacity=".5"/>
+      <text class="lbl" x="28" y="74">Контекст</text>
+      <text class="sml" x="28" y="98">системний промпт,</text>
+      <text class="sml" x="28" y="116">описи скілів і тулів</text>
+    </g>
+    <path class="flow" style="--len:36;--d:240ms" d="M190 88 L218 88" marker-end="url(#ar)"/>
+    <g class="node" style="--d:300ms">
+      <rect class="box" x="226" y="40" width="166" height="96"/>
+      <text class="lbl" x="246" y="74">Модель</text>
+      <text class="sml" x="246" y="98">обирає наступну</text>
+      <text class="sml" x="246" y="116">дію</text>
+    </g>
+    <path class="flow" style="--len:36;--d:480ms" d="M398 88 L426 88" marker-end="url(#ar)"/>
+    <g class="node" style="--d:540ms">
+      <rect class="box" x="434" y="40" width="166" height="96" stroke="#4ade80" stroke-opacity=".5"/>
+      <text class="lbl" x="454" y="74">Інструмент</text>
+      <text class="sml" x="454" y="98">read, bash, MCP,</text>
+      <text class="sml" x="454" y="116">сабагент</text>
+    </g>
+    <path class="flow" style="--len:36;--d:720ms" d="M606 88 L634 88" marker-end="url(#ar)"/>
+    <g class="node" style="--d:780ms">
+      <rect class="box" x="642" y="40" width="166" height="96" stroke="#f5a524" stroke-opacity=".5"/>
+      <text class="lbl" x="662" y="74">Результат</text>
+      <text class="sml" x="662" y="98">лягає назад</text>
+      <text class="sml" x="662" y="116">у контекст</text>
+    </g>
+    <path class="flow" style="--len:36;--d:960ms" d="M814 88 L842 88" marker-end="url(#ar)"/>
+    <g class="node" style="--d:1020ms">
+      <rect class="box" x="850" y="40" width="142" height="96" stroke="#fb7185" stroke-opacity=".5" fill="rgba(251,113,133,.06)"/>
+      <text class="lbl" x="870" y="74">Стоп?</text>
+      <text class="sml" x="870" y="98">критерій</text>
+      <text class="sml" x="870" y="116">завершення</text>
+    </g>
+    <path class="flow" style="--len:1100;--d:1200ms" d="M921 142 L921 208 Q921 224 905 224 L112 224 Q96 224 96 208 L96 144" marker-end="url(#ar-rd)" stroke="#fb7185" stroke-dasharray="6 5"/>
+    <text class="sml" x="440" y="248" fill="#fb7185">ні → наступна ітерація, контекст росте з кожним колом</text>
+    <text class="sml" x="8" y="278" fill="#6f7f97">Кожне коло додає токени. Агент без критерію зупинки — це агент, який зупиниться на ліміті вікна.</text>
+  </svg>
+  </div>
+  <p class="lead gap an" style="--i:4">Звідси головна теза блоку: <em>агент — це функція від контексту, а не від промпту.</em> Керувати агентом означає керувати тим, що лягає в це вікно на кожному колі.</p>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Провести пальцем по циклу вголос — це те, чого багато хто ніколи не бачив явно.</li>
+      <li>Ключове: <b>результат кожного інструменту лягає назад у контекст.</b> Прочитав великий файл — він з тобою до кінця сесії.</li>
+      <li>Саме тому сабагент з ізольованим контекстом такий цінний: він читає 20 файлів у себе, а назад віддає абзац.</li>
+      <li>Червона пунктирна стрілка — місце, де все ламається, якщо немає стоп-умови.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«А компакція контексту це не вирішує?»</b> Частково. Компакція стискає історію, але стискає і деталі — після неї агент часто «забуває» домовленості. Краще не засмічувати, ніж потім чистити.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 16. АГЕНТ × SKILL ═══════════ -->
+<section class="slide" data-block="Агенти" data-time="0:50" data-title="Агент × Skill">
+  <div class="kicker gr an" style="--i:0">Приклад у вакуумі</div>
+  <h2 class="an" style="--i:1">Агент і Skill повʼязані у два боки</h2>
+  <div class="g2 gap">
+    <div class="card hl an" style="--i:2">
+      <div class="t"><span class="ico">→</span>Агент тягне скіли</div>
+      <p>Скіли — це процедури, якими агент користується. Агент-рев'юер сам вирішує, що зараз доречний <code class="inl">code-style</code>, а на наступному файлі — <code class="inl">a11y-audit</code>.</p>
+      <pre style="margin-top:12px"><span class="c-c">// агент «reviewer», контекст свій</span>
+<span class="c-k">задача</span>: перевір MR #482
+  → бачить .vue файли
+  → підтягує skill <span class="c-a">a11y-audit</span>
+  → бачить зміну в store
+  → підтягує skill <span class="c-a">code-style</span>
+  → віддає один зведений коментар</pre>
+    </div>
+    <div class="card vi an" style="--i:3">
+      <div class="t"><span class="ico vi">←</span>Скіл делегує в агента</div>
+      <p>Зворотний напрямок, який використовують рідше. Скіл лишає собі маршрутизацію, а важку роботу віддає сабагенту з <b>чистим контекстом і дешевшою моделлю</b>.</p>
+      <pre style="margin-top:12px"><span class="c-c">// skill «impact-analysis»</span>
+головний асистент:
+  → <span class="c-a">Agent(subagent: impact-analysis)</span>
+  → <span class="c-c">сабагент читає 30 файлів</span>
+  <span class="c-c">   у СВОЄМУ вікні</span>
+  → повертає готовий звіт
+  → головний передає дослівно</pre>
+    </div>
+  </div>
+  <div class="card gap2 an" style="--i:4">
+    <div class="t"><span class="ico am">◆</span>Навіщо другий напрямок</div>
+    <p>Це головний важіль економії у великих задачах. Сабагент прочитав 30 файлів — це <b>30 файлів у його вікні, а не у вашому</b>. Назад приходить абзац тексту. Головний контекст лишається чистим, і сесія живе далі.</p>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Більшість знає перший напрямок і не знає другого. Другий — найцінніший.</li>
+      <li>Метафора: сабагент — це не «ще один AI», це <b>ізольований контекст із дешевшою моделлю</b>.</li>
+      <li>Порахувати вголос: 30 файлів × ~2000 токенів = 60 000. Назад — 400 токенів звіту. Різниця в 150 разів.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«А сабагент не втратить контекст задачі?»</b> Втратить — і це фіча. Йому треба передати рівно те, що потрібно для його шматка. Якщо для роботи йому потрібна вся ваша історія — це не той шматок, який варто виносити.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 17. 5 ПРАВИЛ АГЕНТА ═══════════ -->
+<section class="slide" data-block="Агенти" data-time="0:50" data-title="П'ять правил доброго агента">
+  <div class="kicker vi an" style="--i:0">Агенти · як робити</div>
+  <h2 class="an" style="--i:1">Пʼять правил доброго агента</h2>
+  <div class="g2 gap">
+    <ol class="num">
+      <li class="an" style="--i:2"><b>Вузька роль.</b> «Аналізує вплив змін для QA» — так. «Допомагає з кодом» — ні. Роль має вміщатись в одне речення без слова «і».</li>
+      <li class="an" style="--i:3"><b>Ізольований контекст.</b> Агент отримує рівно те, що потрібно для його шматка, і нічого більше.</li>
+      <li class="an" style="--i:4"><b>Найдешевша достатня модель.</b> Класифікація і збір фактів — маленька модель. Складне міркування — велика. «Opus на все» це не якість, це рахунок.</li>
+      <li class="an" style="--i:5"><b>Детермінізм — у скрипт.</b> Те саме правило, що й для скілів. Агент не має рахувати те, що рахує <code class="inl">wc -l</code>.</li>
+      <li class="an" style="--i:6"><b>Явний крок верифікації.</b> Прогнати тести, перечитати діф, звірити з критерієм. Без цього агент упевнено віддає неправильне.</li>
+    </ol>
+    <div class="stack">
+      <div class="card hl an" style="--i:5">
+        <div class="t"><span class="ico">◆</span>Як обирати модель під роль</div>
+        <table class="tbl" style="margin-top:8px">
+          <tr><td>Класифікація, витяг фактів</td><td class="mono" style="color:var(--gr)">найменша</td></tr>
+          <tr><td>Структурований звіт за шаблоном</td><td class="mono" style="color:var(--cy)">середня</td></tr>
+          <tr><td>Архітектурне рішення, дебаг</td><td class="mono" style="color:var(--vi)">найбільша</td></tr>
+        </table>
+      </div>
+      <div class="card am an" style="--i:7">
+        <div class="t"><span class="ico am">!</span>Правило верифікації</div>
+        <p>«Подумай ще раз» — це не верифікація. Верифікація — це <b>зовнішній факт</b>: тест упав чи пройшов, лінтер мовчить чи ні, поле в Jira реально перечиталось після запису.</p>
+      </div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Правило 3 — найбільша економія в грошах. Правило 5 — найбільша економія в нервах.</li>
+      <li>Розкрити правило 5 на живому прикладі: у нашому скілі root-cause після запису поля в Jira є обов'язкове перечитування — бо API може віддати 200 і мовчки не зберегти поле.</li>
+      <li>Сказати: «якщо агент не може перевірити свою роботу зовнішнім фактом — швидше за все, задача поставлена неправильно».</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 18. НАШІ САБАГЕНТИ ═══════════ -->
+<section class="slide" data-block="Агенти · наша практика" data-time="1:00" data-title="Наші сабагенти">
+  <div class="kicker am an" style="--i:0">Як це в нас · один із прикладів</div>
+  <h2 class="an" style="--i:1">Шість сабагентів і три різні моделі</h2>
+  <div class="g23 gap">
+    <div class="card an" style="--i:2">
+      <table class="tbl">
+        <tr><th>Сабагент</th><th>Роль</th><th>Модель</th></tr>
+        <tr><td>impact-analysis</td><td>звіт для QA з git-діфа</td><td class="mono" style="color:var(--cy)">sonnet</td></tr>
+        <tr><td>section-list</td><td>сторінка-список розділу</td><td class="mono" style="color:var(--cy)">sonnet</td></tr>
+        <tr><td>section-form</td><td>сторінка-форма розділу</td><td class="mono" style="color:var(--cy)">sonnet</td></tr>
+        <tr><td>write-tests</td><td>unit-тести на composables</td><td class="mono" style="color:var(--cy)">sonnet</td></tr>
+        <tr><td>root-cause</td><td>класифікація причини бага</td><td class="mono" style="color:var(--vi)">fable</td></tr>
+        <tr><td>backoffice-permissions</td><td>права доступу розділу</td><td class="mono" style="color:var(--gr)">haiku</td></tr>
+      </table>
+    </div>
+    <div class="stack">
+      <div class="card hl an" style="--i:3">
+        <div class="t"><span class="ico">◆</span>Наскрізний сценарій <code class="inl">/ia</code></div>
+        <ol class="num" style="margin-top:10px;gap:8px">
+          <li style="font-size:14px">Скіл вирішує: аналіз не тут, а в сабагенті</li>
+          <li style="font-size:14px">Сабагент читає діф у своєму вікні на sonnet</li>
+          <li style="font-size:14px">Повертає готовий звіт українською</li>
+          <li style="font-size:14px">Головний асистент передає дослівно і питає: писати в Jira?</li>
+          <li style="font-size:14px">Запис у поле, <b>перечитування для перевірки</b>, і пропозиція <code class="inl">/root-cause</code></li>
+        </ol>
+      </div>
+      <div class="card gr an" style="--i:4">
+        <p><b>Чому запис у Jira лишили в головному контексті:</b> він має нести реальний намір користувача і вміти показати запит на дозвіл. Сабагенту таке не довіряють.</p>
+      </div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Головна ілюстрація тут — колонка з моделями. Три різні моделі під три різні класи задач.</li>
+      <li><code>backoffice-permissions</code> на haiku — це майже класифікація, великій моделі там нічого робити.</li>
+      <li>Пункт про Jira — важливий патерн безпеки: <b>дії з побічними ефектами лишаються там, де є людина.</b></li>
+      <li>Не заглиблюватись у деталі наших розділів — зала не з нашої команди по беку.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«Скільки часу пішло це побудувати?»</b> Ітеративно, кілька місяців, і половину переписали після першого заміру бюджету. Починати варто з одного скіла, а не з шести агентів.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 19. АНТИПАТЕРНИ АГЕНТІВ ═══════════ -->
+<section class="slide" data-block="Агенти" data-time="0:40" data-title="Антипатерни агентів">
+  <div class="kicker an" style="--i:0">Агенти · чого не робити</div>
+  <h2 class="an" style="--i:1">Пʼять агентів, яких не варто робити</h2>
+  <div class="g3 gap">
+    <div class="card rd an" style="--i:2"><div class="t"><span class="ico rd">1</span>Агент-універсал</div><p>«Помічник по проєкту». Робить усе потроху й нічого добре. Контекст роздутий, бо має бути готовий до всього.</p></div>
+    <div class="card rd an" style="--i:3"><div class="t"><span class="ico rd">2</span>Агент замість скрипта</div><p>Модель робить те, що детерміновано робить код. Дорожче, повільніше, і щоразу трохи інакше.</p></div>
+    <div class="card rd an" style="--i:4"><div class="t"><span class="ico rd">3</span>«Подумай ще раз»</div><p>Самоперевірка без зовнішнього факту. Модель упевнено підтверджує власну помилку.</p></div>
+    <div class="card rd an" style="--i:5"><div class="t"><span class="ico rd">4</span>Агент без стоп-умови</div><p>Крутиться, поки не впреться в ліміт вікна. Формально «працює», по суті — горить бюджет.</p></div>
+    <div class="card rd an" style="--i:6"><div class="t"><span class="ico rd">5</span>Найбільша модель на все</div><p>Класифікація на топовій моделі — це переплата в десятки разів за задачу, з якою впорається найменша.</p></div>
+    <div class="card gr an" style="--i:7"><div class="t"><span class="ico gr">✓</span>Протиотрута</div><p>Одне речення ролі без «і» · один вимірюваний результат · зовнішній критерій завершення · найдешевша модель, яка ще справляється.</p></div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Швидкий слайд, 40 секунд. Не читати всі картки — назвати заголовки, розкрити одну-дві.</li>
+      <li>Пункт 3 варто розкрити: це та сама проблема, що й код-рев'ю самого себе.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 20. ЩО ТАКЕ MCP ═══════════ -->
+<section class="slide" data-block="MCP" data-time="0:45" data-title="Що таке MCP">
+  <div class="kicker gr an" style="--i:0">Блок 3 · MCP</div>
+  <h2 class="an" style="--i:1">MCP — єдиний протокол «агент ↔ зовнішня система»</h2>
+  <p class="lead an" style="--i:2">До нього кожна інтеграція писалась окремо під кожен інструмент. Тепер сервер пишеться один раз і його бачать усі агенти, що говорять протоколом.</p>
+  <div class="g3 gap2">
+    <div class="card hl an" style="--i:3">
+      <div class="t"><span class="ico">◆</span>tools</div>
+      <p><b>Дії.</b> Те, що агент може викликати: створити задачу, запустити запит, надіслати повідомлення. Мають побічні ефекти.</p>
+    </div>
+    <div class="card vi an" style="--i:4">
+      <div class="t"><span class="ico vi">◆</span>resources</div>
+      <p><b>Дані для читання.</b> Адресується URI, читається без побічних ефектів. Саме сюди має йти все, що просто «подивитись».</p>
+    </div>
+    <div class="card gr an" style="--i:5">
+      <div class="t"><span class="ico gr">◆</span>prompts</div>
+      <p><b>Готові шаблони.</b> Параметризовані сценарії, які сервер пропонує клієнту. Використовуються рідше за перші два.</p>
+    </div>
+  </div>
+  <div class="g2 gap2">
+    <div class="card an" style="--i:6"><p><b>Транспорти:</b> <code class="inl">stdio</code> для локальних серверів (запускається як процес поруч) і <code class="inl">Streamable HTTP</code> для віддалених.</p></div>
+    <div class="card an" style="--i:7"><p><b>Важливо:</b> MCP не ухвалює рішень. Це руки, не голова. Уся логіка лишається в скілах і агентах.</p></div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Аналогія, яку люблять: MCP — це USB-C для агентів. Один роз'єм замість кабелю під кожен пристрій.</li>
+      <li>Найважливіша практична річ на слайді: <b>розділення tools і resources.</b> Якщо це читання без наслідків — це resource, і його можна кешувати.</li>
+      <li>Не заглиблюватись у транспорти, якщо зала не питає.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 21. СПЕКА 2026-07-28 (ОПЦІЙНИЙ) ═══════════ -->
+<section class="slide" data-block="MCP" data-time="0:40" data-title="Спека MCP 2026-07-28" data-optional="1">
+  <div class="opt"><span class="pill am">опційний слайд</span></div>
+  <div class="kicker gr an" style="--i:0">MCP · актуальний стан</div>
+  <h2 class="an" style="--i:1">Що змінилось у специфікації 2026-07-28</h2>
+  <div class="g2 gap">
+    <div class="stack">
+      <div class="card hl an" style="--i:2">
+        <div class="t"><span class="ico">◆</span>Протокол став stateless</div>
+        <p>Немає рукостискання <code class="inl">initialize</code> і немає session id. Кожен запит самоописовий: несе версію протоколу, ідентичність клієнта і його можливості. Наслідок — будь-який запит може лягти на будь-який інстанс за балансером, без спільного сховища.</p>
+      </div>
+      <div class="card vi an" style="--i:3">
+        <div class="t"><span class="ico vi">◆</span>MRTR — багатокрокові запити</div>
+        <p>Сервер може відповісти <code class="inl">resultType: "input_required"</code> і доуточнити параметри чи попросити підтвердження <b>посеред виклику</b> — замість утримування відкритого стріму.</p>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card gr an" style="--i:4">
+        <div class="t"><span class="ico gr">◆</span>Маршрутизація за заголовками</div>
+        <p>Заголовки <code class="inl">Mcp-Method</code> і <code class="inl">Mcp-Name</code> дозволяють гейтвею й rate-лімітеру приймати рішення, не розбираючи JSON-тіло.</p>
+      </div>
+      <div class="card am an" style="--i:5">
+        <div class="t"><span class="ico am">◆</span>Кешовані list-результати</div>
+        <p>Відповіді на list і read несуть <code class="inl">ttlMs</code> і <code class="inl">cacheScope</code>. Клієнт перестає перезапитувати те, що не змінилось.</p>
+      </div>
+      <div class="card rd an" style="--i:6">
+        <div class="t"><span class="ico rd">!</span>Deprecated</div>
+        <p>Roots, Sampling і Logging позначені як застарілі — мінімум 12 місяців до видалення. Якщо ваш сервер на них спирається, є час переїхати.</p>
+      </div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li><b>Це опційний слайд.</b> Пропустити, якщо йдете довго — на розуміння решти доповіді він не впливає.</li>
+      <li>Головне, що варто сказати навіть при пропуску: протокол став stateless, і це різко спрощує хостинг власного сервера.</li>
+      <li>Deprecation Sampling — важливий для тих, хто планує писати сервер: не закладатись на нього.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 22. ПРИХОВАНА ЦІНА MCP ═══════════ -->
+<section class="slide" data-block="MCP" data-time="0:50" data-title="Прихована ціна MCP">
+  <div class="kicker gr an" style="--i:0">MCP · чого не видно</div>
+  <h2 class="an" style="--i:1">Прихована ціна: тули платяться в кожній сесії</h2>
+  <div class="vs gap">
+    <div class="card rd an" style="--i:2">
+      <div class="t"><span class="ico rd">✕</span>Наївний підхід</div>
+      <ul class="ls no" style="margin-top:12px">
+        <li>Підключили 6 серверів — це 40-60 визначень тулів у системному промпті <b>кожної сесії</b>, навіть якщо ви не викликали жодного</li>
+        <li>Результат виклику проходить через модель <b>двічі</b>: прийшов у контекст, потім модель переписала його в наступний виклик</li>
+        <li>Вивантажили 500 рядків з API, щоб узяти з них три поля — усі 500 у вікні назавжди</li>
+      </ul>
+    </div>
+    <div class="arrow an" style="--i:3">→</div>
+    <div class="card gr an" style="--i:4">
+      <div class="t"><span class="ico gr">✓</span>Рішення, які вже є</div>
+      <ul class="ls ok" style="margin-top:12px">
+        <li><b>Tool search.</b> Визначення тулів не висять у промпті — агент шукає й підвантажує потрібні на вимогу</li>
+        <li><b>Code execution with MCP.</b> Агент пише код, який викликає тули й фільтрує результат — у контекст повертається тільки підсумок</li>
+        <li><b>Точкові запити.</b> Просити конкретні поля, а не «віддай усе»</li>
+      </ul>
+      <p style="margin-top:12px;color:var(--gr)"><b>На типових пайплайнах це до ~98% економії токенів на роботі з тулами.</b></p>
+    </div>
+  </div>
+  <div class="card am gap2 an" style="--i:5">
+    <p><b>Правило, яке з цього випливає:</b> кожен доданий тул — це податок на кожну сесію. П'ять добре названих тулів із чіткими описами корисніші, ніж сорок сирих. Проєктування MCP-сервера починається з питання «які тули тут зайві».</p>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Це найпрактичніший слайд блоку MCP. Люди підключають сервери й не розуміють, чому контекст закінчується на другому питанні.</li>
+      <li>«Двічі через модель» проговорити повільно — це неочевидно.</li>
+      <li>Наш живий приклад точкового запиту: у скілі impact-analysis прямо написано «ніколи не запитуй <code>*all</code> з Jira — payload величезний». Це правило народилось із болю.</li>
+      <li>Цифру 98% подавати як «до», а не як гарантію — вона з опублікованих кейсів на конкретних пайплайнах.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 23. СВІЙ MCP-СЕРВЕР I ═══════════ -->
+<section class="slide" data-block="MCP · свій сервер" data-time="1:05" data-title="Свій MCP-сервер як агрегатор">
+  <div class="kicker gr an" style="--i:0">Приклад у вакуумі</div>
+  <h2 class="an" style="--i:1">Свій MCP-сервер як <span class="gradtx">агрегатор</span></h2>
+  <p class="lead an" style="--i:2">Звичний погляд: MCP — це обгортка над чужим API. Але сервер можна писати й «навпаки»: як <em>точку збору й роздачі стану</em> для всього парку агентів.</p>
+  <div class="gap fade" style="--i:3">
+  <svg class="dia" viewBox="0 0 1000 300" role="img" aria-label="MCP-сервер як агрегатор даних від багатьох агентів">
+    <text class="sml" x="8" y="18" fill="#6f7f97">ДЖЕРЕЛА — пишуть</text>
+    <g class="node" style="--d:0ms"><rect class="box" x="8" y="30" width="190" height="54"/><text class="lbl" x="26" y="55" font-size="13">Агент у репо A</text><text class="sml" x="26" y="73">результати рев'ю</text></g>
+    <g class="node" style="--d:100ms"><rect class="box" x="8" y="96" width="190" height="54"/><text class="lbl" x="26" y="121" font-size="13">Агент у CI</text><text class="sml" x="26" y="139">падіння тестів, флейки</text></g>
+    <g class="node" style="--d:200ms"><rect class="box" x="8" y="162" width="190" height="54"/><text class="lbl" x="26" y="187" font-size="13">Агент у репо B</text><text class="sml" x="26" y="205">метрики бандла</text></g>
+    <g class="node" style="--d:300ms"><rect class="box" x="8" y="228" width="190" height="54"/><text class="lbl" x="26" y="253" font-size="13">Локальні агенти</text><text class="sml" x="26" y="271">нотатки, рішення</text></g>
+
+    <path class="flow" style="--len:120;--d:420ms" d="M204 57 L300 130" marker-end="url(#ar)"/>
+    <path class="flow" style="--len:100;--d:480ms" d="M204 123 L300 140" marker-end="url(#ar)"/>
+    <path class="flow" style="--len:100;--d:540ms" d="M204 189 L300 160" marker-end="url(#ar)"/>
+    <path class="flow" style="--len:120;--d:600ms" d="M204 255 L300 172" marker-end="url(#ar)"/>
+
+    <g class="node" style="--d:700ms">
+      <rect class="box" x="310" y="46" width="330" height="210" fill="rgba(74,222,128,.055)" stroke="#4ade80" stroke-opacity=".55"/>
+      <text class="lbl" x="334" y="76" font-size="15">Ваш MCP-сервер</text>
+      <text class="sml" x="334" y="98" fill="#4ade80">нормалізація у спільну схему</text>
+      <rect x="334" y="112" width="282" height="1" fill="#1d2839"/>
+      <text class="sml" x="334" y="136" fill="#a7b4c8">◆ приймає події від будь-якого агента</text>
+      <text class="sml" x="334" y="158" fill="#a7b4c8">◆ зводить їх у єдину модель даних</text>
+      <text class="sml" x="334" y="180" fill="#a7b4c8">◆ зберігає з версією схеми</text>
+      <rect x="334" y="196" width="282" height="1" fill="#1d2839"/>
+      <text class="sml" x="334" y="220" fill="#3ce0e0">resources → читання накопиченого</text>
+      <text class="sml" x="334" y="240" fill="#8b6cf6">tools → запити, зрізи, дії</text>
+    </g>
+
+    <path class="flow" style="--len:110;--d:1000ms" d="M646 110 L742 74" marker-end="url(#ar-vi)" stroke="#8b6cf6"/>
+    <path class="flow" style="--len:90;--d:1060ms" d="M646 150 L742 150" marker-end="url(#ar-vi)" stroke="#8b6cf6"/>
+    <path class="flow" style="--len:110;--d:1120ms" d="M646 192 L742 228" marker-end="url(#ar-vi)" stroke="#8b6cf6"/>
+
+    <text class="sml" x="752" y="18" fill="#6f7f97">СПОЖИВАЧІ — читають</text>
+    <g class="node" style="--d:1160ms"><rect class="box" x="752" y="46" width="240" height="56" stroke="#8b6cf6" stroke-opacity=".45"/><text class="lbl" x="772" y="72" font-size="13">Дашборд</text><text class="sml" x="772" y="90">той самий сервер як бекенд</text></g>
+    <g class="node" style="--d:1220ms"><rect class="box" x="752" y="122" width="240" height="56" stroke="#8b6cf6" stroke-opacity=".45"/><text class="lbl" x="772" y="148" font-size="13">Інший агент</text><text class="sml" x="772" y="166">«що вже знає команда?»</text></g>
+    <g class="node" style="--d:1280ms"><rect class="box" x="752" y="198" width="240" height="56" stroke="#8b6cf6" stroke-opacity=".45"/><text class="lbl" x="772" y="224" font-size="13">Звіти й алерти</text><text class="sml" x="772" y="242">зрізи за періодом</text></g>
+  </svg>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Це слайд «розширення кругозору» — приклад свідомо не про наші продукти.</li>
+      <li>Ключовий зсув у голові: MCP може бути не тільки <i>виходом</i> агента назовні, а й <b>спільною памʼяттю парку агентів</b>.</li>
+      <li>Найцінніша частина — права стрілка: той самий сервер віддає дані і агенту, і звичайному дашборду. Один контракт, два типи споживачів.</li>
+      <li>Приклади, які заходять: зведення флейків з усіх репозиторіїв; спільний реєстр архітектурних рішень; накопичення метрик бандла по проєктах.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«Це ж просто API з базою, навіщо MCP?»</b> Саме так — усередині це звичайний сервіс. MCP дає стандартний контракт, завдяки якому будь-який агент бачить його без окремої інтеграції, з описами й типами. Ви пишете сервер один раз, а не адаптер під кожен інструмент.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 24. СВІЙ MCP-СЕРВЕР II ═══════════ -->
+<section class="slide" data-block="MCP · свій сервер" data-time="0:55" data-title="Свій MCP-сервер: що продумати">
+  <div class="kicker gr an" style="--i:0">MCP · свій сервер</div>
+  <h2 class="an" style="--i:1">Шість рішень, які треба ухвалити до першого рядка коду</h2>
+  <div class="g3 gap">
+    <div class="card hl an" style="--i:2"><div class="t"><span class="ico">1</span>Контракт схеми</div><p>Дані пишуть різні агенти в різний час. Схема з версією й валідацією на вході — інакше через місяць у вас пʼять форматів одного поля.</p></div>
+    <div class="card an" style="--i:3"><div class="t"><span class="ico vi">2</span>Ідемпотентність</div><p>Агент упав і повторив запис. Потрібен ключ ідемпотентності, інакше у звітах будуть дублі, яких ніхто не помітить.</p></div>
+    <div class="card an" style="--i:4"><div class="t"><span class="ico gr">3</span>Авторизація і скоупи</div><p>Кожен агент має свою ідентичність і свій набір прав. CI-агент пише, дашборд тільки читає. Не один токен на всіх.</p></div>
+    <div class="card an" style="--i:5"><div class="t"><span class="ico am">4</span>TTL і кеш</div><p>Позначайте <code class="inl">ttlMs</code> на list і read. Найдешевший запит — той, який клієнт не зробив.</p></div>
+    <div class="card an" style="--i:6"><div class="t"><span class="ico pk">5</span>Бюджет тулів</div><p>Кожен тул — податок на кожну сесію кожного агента. Пʼять добре названих корисніші за сорок сирих. Читання виносьте в resources.</p></div>
+    <div class="card an" style="--i:7"><div class="t"><span class="ico bl">6</span>Спостережуваність</div><p>Хто, що і коли записав. Коли агент запише дурницю — а він запише — вам потрібно буде знайти, який саме і коли.</p></div>
+  </div>
+  <div class="card am gap2 an" style="--i:8">
+    <p><b>Головна пастка:</b> писати MCP-сервер як «ще одне API». Різниця в тому, що <b>ваш клієнт — модель</b>. Вона читає назви й описи тулів як документацію і помиляється там, де людина перепитала б. Назви й описи тут — не косметика, а частина контракту.</p>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Пункт 2 — з практики: агенти падають і ретраять значно частіше, ніж класичні клієнти.</li>
+      <li>Пункт 5 — місток назад до слайда про приховану ціну. Нагадати.</li>
+      <li>Фінальна плашка — головна думка блоку: <b>ваш клієнт не людина, а модель.</b> Проговорити обов'язково.</li>
+      <li>Якщо є час — спитати залу, у кого є задача, яка лягла б на такий агрегатор. Зазвичай хтось згадує флейки або метрики збірок.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 25. MCP У НАС ═══════════ -->
+<section class="slide" data-block="MCP · наша практика" data-time="0:45" data-title="MCP і hooks у нас">
+  <div class="kicker am an" style="--i:0">Як це в нас · один із прикладів</div>
+  <h2 class="an" style="--i:1">Що підключено — і що свідомо не через модель</h2>
+  <div class="g2 gap">
+    <div class="card an" style="--i:2">
+      <div class="t"><span class="ico">◆</span>MCP-сервери в роботі</div>
+      <table class="tbl" style="margin-top:8px">
+        <tr><td>Atlassian</td><td>читання полів задачі, запис Impact analysis і Root cause</td></tr>
+        <tr><td>Sentry</td><td>помилки й трейси до root-cause аналізу</td></tr>
+        <tr><td>Figma</td><td>дизайн-контекст під час верстки</td></tr>
+        <tr><td>Slack</td><td>сповіщення й пошук по обговореннях</td></tr>
+        <tr><td>Playwright</td><td>перевірка сценаріїв у браузері</td></tr>
+      </table>
+    </div>
+    <div class="card gr an" style="--i:3">
+      <div class="t"><span class="ico gr">◆</span>Hooks — детермінований шар поруч</div>
+      <pre style="margin-top:8px"><span class="c-k">SessionStart</span>
+  <span class="c-a">sync-core-claude.mjs</span>  <span class="c-c">симлінки скілів</span>
+  <span class="c-a">docs-inject.mjs</span>      <span class="c-c">індекс вікі в контекст</span>
+  <span class="c-a">docs-hooks-install.mjs</span> <span class="c-c">git-хуки</span>
+
+<span class="c-k">Stop</span>
+  <span class="c-a">docs-guard.mjs</span>       <span class="c-c">нагадати оновити доки</span>
+  <span class="c-a">root-cause-guard.mjs</span> <span class="c-c">нагадати про поле в Jira</span></pre>
+      <p style="margin-top:12px">Те, що має статись <b>завжди</b>, не доручають моделі. Хук виконається, навіть якщо агент про нього «забув» — і це коштує нуль токенів.</p>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Головна думка слайда — права колонка, а не ліва. Hooks недооцінені.</li>
+      <li>Сформулювати правило: <b>«має статись завжди» = хук, «залежить від ситуації» = скіл або агент.</b></li>
+      <li><code>docs-guard</code> питає рівно один раз і тільки після push — це важлива деталь UX: хук, який нудить, вимикають на другий день.</li>
+      <li>Згадати kill switch <code>CARDONA_DOCS_GUARD=0</code> — будь-яка автоматизація має мати вимикач, інакше їй не довіряють.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 26. JEV — РАМКА ═══════════ -->
+<section class="slide" data-block="Jev · погляд у майбутнє" data-time="0:40" data-title="Jev: рамка блоку">
+  <div class="kicker am an" style="--i:0">Блок 4 · розвідка майбутнього</div>
+  <h2 class="an" style="--i:1">Далі — технологія, яку ми <span class="gradtx">не використовуємо</span></h2>
+  <div class="card am gap an" style="--i:2">
+    <p style="font-size:clamp(14px,1.4vw,19px)"><b>Чесна рамка, щоб не було непорозумінь.</b> Наступні три слайди — не пропозиція щось переписувати і не план на спринт. Це нова технологія, яка зʼявилась цього місяця. Я хочу, щоб ви знали, що вона існує, розуміли, яку проблему вона закриває, і могли оцінити її самі — <b>якщо</b> вона доживе до статусу стандарту.</p>
+  </div>
+  <div class="g2 gap2">
+    <div class="card an" style="--i:3">
+      <div class="t"><span class="ico rd">✕</span>Проблема, яка є вже зараз</div>
+      <p>Агент постійно ухвалює дрібні судження:</p>
+      <ul class="ls" style="margin-top:10px">
+        <li>Ця команда небезпечна чи ні?</li>
+        <li>Який із 30 скілів зараз доречний?</li>
+        <li>Чи релевантний цей файл до задачі?</li>
+        <li>Чи підтверджує джерело це твердження?</li>
+      </ul>
+      <p style="margin-top:12px">За кожне таке судження платиться повноцінною генерацією тексту. Судження дешеві по суті — але дорогі по механіці.</p>
+    </div>
+    <div class="card an" style="--i:4">
+      <div class="t"><span class="ico am">→</span>Ідея, яку варто знати</div>
+      <p>Замість того, щоб просити модель <i>написати текст</i> про своє рішення — попросити її <b>повернути саме рішення</b>: один з варіантів, оцінку або ймовірність. Без генерації тексту.</p>
+      <p style="margin-top:12px">Це окремий клас моделей. Швидших і дешевших на два порядки — але вужчих.</p>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li><b>Рамку проговорити вголос майже дослівно.</b> Інакше хтось піде з думкою, що ми це впроваджуємо.</li>
+      <li>Мотивація блоку: галузь рухається швидко, і корисно розуміти напрямок руху, навіть коли не біжиш першим.</li>
+      <li>Ліва картка важлива сама по собі — вона описує реальну проблему нашого сьогоднішнього харнесу, незалежно від того, чим її вирішувати.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 27. ЩО ТАКЕ JEV ═══════════ -->
+<section class="slide" data-block="Jev · погляд у майбутнє" data-time="1:00" data-title="Що таке Jev">
+  <div class="kicker am an" style="--i:0">Jev · що це</div>
+  <h2 class="an" style="--i:1">Jev: модель, що повертає рішення, а не текст</h2>
+  <p class="lead an" style="--i:2">«System One»-модель від TypeSafe AI, вересень 2026. Немає авторегресії — тобто немає посимвольної генерації. Є типізована відповідь на поставлені питання.</p>
+  <div class="g3 gap2">
+    <div class="card hl an" style="--i:3">
+      <div class="t"><span class="ico">◆</span>choice</div>
+      <p>Який із варіантів? Повертає обраний + розподіл ймовірностей по всіх.</p>
+    </div>
+    <div class="card vi an" style="--i:4">
+      <div class="t"><span class="ico vi">◆</span>score</div>
+      <p>Де це на шкалі? Повертає числову оцінку за заданою рубрикою.</p>
+    </div>
+    <div class="card gr an" style="--i:5">
+      <div class="t"><span class="ico gr">◆</span>noul</div>
+      <p>Це правда? Повертає ймовірність від 0 до 1.</p>
+    </div>
+  </div>
+  <div class="g4 gap2">
+    <div class="stat an" style="--i:6"><div class="v cy">70–500<span style="font-size:.45em"> ms</span></div><div class="l">затримка end-to-end</div></div>
+    <div class="stat an" style="--i:7"><div class="v vi">$0.042<span style="font-size:.4em">/M</span></div><div class="l">вхідні токени</div></div>
+    <div class="stat an" style="--i:8"><div class="v gr">$0</div><div class="l">вихід — немає циклу генерації</div></div>
+    <div class="stat an" style="--i:9"><div class="v am">1</div><div class="l">виклик — усі питання паралельно</div></div>
+  </div>
+  <div class="card am gap2 an" style="--i:10">
+    <p><b>Головна властивість і головне обмеження в одному реченні:</b> модель <em>не може повернути невалідний тип</em> — але цілком може повернути <em>валідне неправильне значення</em>. Плюс до кожної відповіді йде калібрована впевненість, за якою можна ставити поріг.</p>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Пояснити «без авторегресії» просто: звичайна модель будує відповідь по токену, тут одразу віддається рішення. Звідси і швидкість, і нульова ціна виходу.</li>
+      <li>Калібрована впевненість — недооцінена частина. Вона дозволяє будувати логіку «якщо впевненість нижче 0.8 — передай великій моделі».</li>
+      <li>Фразу про валідний тип / неправильне значення проговорити повільно. Це запобіжник від надмірних очікувань.</li>
+      <li>Ціни назвати як порядок величини, а не як точну цифру — вони змінюються.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«Це ж просто класифікатор?»</b> По суті — так, але з двома відмінностями: він загальнопризначений (рубрику задаєте ви в запиті, без донавчання) і навчений саме на калібрування ймовірностей, а не тільки на точність.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 28. ПАТЕРНИ JEV ═══════════ -->
+<section class="slide" data-block="Jev · погляд у майбутнє" data-time="1:00" data-title="Де Jev дав би виграш">
+  <div class="kicker am an" style="--i:0">Jev · де це дає виграш</div>
+  <h2 class="an" style="--i:1">Пʼять патернів із публічних кейсів</h2>
+  <div class="g2 gap">
+    <div class="stack">
+      <div class="card hl an" style="--i:2">
+        <div class="t"><span class="ico">1</span>Роутер здібностей</div>
+        <p>Замість тримати описи всіх скілів у промпті — локальний шорт-лист по BM25, одне <code class="inl">choice</code>-питання, максимум одна підказка. «Утриматись» — повноцінний варіант відповіді.</p>
+        <div class="row" style="margin-top:10px"><span class="pill cy">p95 406 ms з кешем</span><span class="pill">221 ms на повторі</span></div>
+      </div>
+      <div class="card an" style="--i:3">
+        <div class="t"><span class="ico rd">2</span>Guardrail перед tool-call</div>
+        <p>Перед виконанням команди — 4 питання за ~250 мс: чи незворотна дія, чи поза задачею, чи змінює дані, який масштаб.</p>
+        <div class="row" style="margin-top:10px"><span class="pill am">17 000 викликів</span><span class="pill rd">42 зупинки</span></div>
+      </div>
+      <div class="card an" style="--i:4">
+        <div class="t"><span class="ico vi">3</span>Реранкінг результатів</div>
+        <p>Оцінити знайдене <b>до</b> того, як це прочитає велика модель. У опублікованому кейсі юридичного пошуку точність top-1 зросла з 5% до 18%.</p>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card an" style="--i:5">
+        <div class="t"><span class="ico gr">4</span>Скринінг prompt injection</div>
+        <p>По кілька <code class="inl">noul</code>-питань на кожну завантажену сторінку: релевантна, має докази, суперечить передумові, схожа на ін'єкцію. Підкинутий шкідливий текст отримав 0.99 і був відкинутий.</p>
+      </div>
+      <div class="card an" style="--i:6">
+        <div class="t"><span class="ico bl">5</span>Роутинг моделі</div>
+        <p>Оцінити складність і намір запиту — і вибрати найдешевшу модель, яка впорається. Доступно через шлюзи на кшталт Vercel AI Gateway.</p>
+      </div>
+      <div class="card am an" style="--i:7">
+        <div class="t"><span class="ico am">?</span>Гіпотези для нас — саме гіпотези</div>
+        <ul class="ls" style="margin-top:8px">
+          <li>Вибір скіла замість опису всіх скілів у кожній сесії</li>
+          <li>Гейт «чи змінює цей коміт контракт сторінки» перед оновленням вікі</li>
+          <li>Фільтр файлів до того, як сабагент їх прочитає</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Патерн 2 — найпереконливіший: 42 зупинки на 17 000 викликів, тобто він не заважає, але ловить.</li>
+      <li>Патерн 3 — найближчий до нашого болю: агент читає файли, які йому не потрібні. Відсіювання <i>до</i> читання — саме те, чого бракує.</li>
+      <li>Остання картка — обовʼязково наголосити слово «гіпотези». Це не беклог.</li>
+      <li>Цифри з кейсів подавати як чужі виміри, не як наші обіцянки.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 29. ОБМЕЖЕННЯ JEV ═══════════ -->
+<section class="slide" data-block="Jev · погляд у майбутнє" data-time="0:50" data-title="Обмеження Jev і критерії">
+  <div class="kicker am an" style="--i:0">Jev · чесно про межі</div>
+  <h2 class="an" style="--i:1">Де воно ламається — і за яких умов ми б його взяли</h2>
+  <div class="g2 gap">
+    <div class="card rd an" style="--i:2">
+      <div class="t"><span class="ico rd">✕</span>Задокументовані обмеження</div>
+      <ul class="ls no" style="margin-top:12px">
+        <li><b>Буквальне читання.</b> Відповідає на ваші слова, а не на ваш намір. Формулювання питання критичне</li>
+        <li><b>Математика й підрахунки.</b> Бачить форму, не значення</li>
+        <li><b>Дати.</b> Порівнює як текст, а не як дати</li>
+        <li><b>Multi-hop.</b> На складених питаннях точність помітно падає</li>
+        <li><b>Великий шумний стан.</b> Розсіюється так само, як великі моделі</li>
+        <li><b>Adversarial-текст.</b> Її можна «повести» підкинутим вмістом</li>
+      </ul>
+    </div>
+    <div class="card gr an" style="--i:3">
+      <div class="t"><span class="ico gr">✓</span>Наші критерії «коли беремо»</div>
+      <ul class="ls ok" style="margin-top:12px">
+        <li><b>Стабільний SDK</b> і доступ без вейтліста</li>
+        <li><b>Прийнятний privacy-контур.</b> Промпти йдуть у зовнішній сервіс — для нашого коду це окреме рішення, а не дрібниця</li>
+        <li><b>Вимірюваний виграш</b> саме на нашому бюджеті, а не в чужому кейсі</li>
+        <li><b>Статус стандарту, а не хайпу.</b> Технології цього класу зʼявляються швидше, ніж встигають дозріти</li>
+      </ul>
+      <p style="margin-top:14px;color:var(--gr)"><b>Поки що: спостерігаємо.</b> Без витрат, без переписування, без обіцянок.</p>
+    </div>
+  </div>
+  <div class="card gap2 an" style="--i:4">
+    <p style="text-align:center;font-size:clamp(14px,1.45vw,19px)">Підсумок блоку: <b>це фільтр і роутер, а не заміна міркування.</b> Там, де потрібне міркування, дешева модель лишається дешевою моделлю.</p>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Права колонка важливіша за ліву — вона показує, як ми взагалі ухвалюємо рішення про нові інструменти.</li>
+      <li>Пункт про privacy проговорити окремо: наш код у зовнішньому сервісі — це питання не до фронтенду, а до компанії.</li>
+      <li>Останній рядок — головний винос блоку. Сказати його як фінальну крапку і йти далі.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«А є щось таке, що можна хостити локально?»</b> З'явились відкриті репродукції ваг, але зрілість у них інша. Якщо задача реально стоїть — починати варто з вимірювання, скільки ми взагалі платимо за дрібні судження. Може виявитись, що гра не варта свічок.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 30. КОНТЕКСТ — ЦЕ БЮДЖЕТ ═══════════ -->
+<section class="slide" data-block="Токени" data-time="0:45" data-title="Контекст — це бюджет">
+  <div class="kicker pk an" style="--i:0">Блок 5 · Токени</div>
+  <h2 class="an" style="--i:1">Контекст — це бюджет, а не безліміт</h2>
+  <div class="g23 gap">
+    <div>
+      <p class="lead an" style="--i:2">Вікно в 200 тисяч токенів створює ілюзію, що можна не думати. Але якість відповіді падає <b>задовго</b> до формального ліміту — цей ефект називають <em>context rot</em>.</p>
+      <p class="lead gap an" style="--i:3">Чим більше в контексті всього, тим важче моделі втримати те, що справді важливо. Зайвий файл не просто коштує грошей — він <b>погіршує рішення</b>.</p>
+      <div class="card am gap2 an" style="--i:4">
+        <p style="font-size:clamp(14px,1.4vw,18px)"><b>Мета оптимізації — не «менше токенів». Мета — менше сміття.</b> Скорочувати треба те, що не впливає на рішення. Усе інше залишати.</p>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card rd an" style="--i:3"><div class="t"><span class="ico rd">✕</span>Що засмічує</div><ul class="ls no" style="margin-top:8px"><li>Повні дампи API замість потрібних полів</li><li>Файли, прочитані «про всяк випадок»</li><li>Довгі скіли, що спрацювали не до речі</li><li>Описи 40 тулів, з яких ви юзаєте два</li></ul></div>
+      <div class="card gr an" style="--i:4"><div class="t"><span class="ico gr">✓</span>Що працює</div><ul class="ls ok" style="margin-top:8px"><li>Зовнішня памʼять замість історії в вікні</li><li>Сабагенти з власним контекстом</li><li>Точкові запити й фільтрація до читання</li><li>Скрипти замість міркувань</li></ul></div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Розкрити context rot побутово: «це як шукати потрібний рядок у файлі на 10 тисяч рядків — технічно все там є, практично ви його не знайдете».</li>
+      <li>Головна фраза: <b>зайвий файл не просто коштує грошей, він погіршує рішення.</b> Це те, чого не розуміють ті, хто дивиться тільки на рахунок.</li>
+      <li>Перехід до наступного слайда: «а тепер найнудніша, але найкорисніша частина — як це поміряти».</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 31. ВИМІРЮВАННЯ ═══════════ -->
+<section class="slide" data-block="Токени" data-time="1:00" data-title="Спочатку виміряй">
+  <div class="kicker pk an" style="--i:0">Токени · метод</div>
+  <h2 class="an" style="--i:1">Спочатку виміряй. Оптимізувати без цифр — самообман</h2>
+  <p class="lead an" style="--i:2">Універсальний підхід: розділіть вартість обвʼязки на два принципово різні класи.</p>
+  <div class="g2 gap">
+    <div class="card hl an" style="--i:3">
+      <div class="t"><span class="ico">A</span>Always-on — платиться в кожній сесії</div>
+      <p style="margin-bottom:12px">Описи всіх скілів і агентів, кореневий AGENTS.md / CLAUDE.md, правила, описи команд, payload стартових хуків. Навіть якщо ви нічого не викликали.</p>
+      <div class="bars">
+        <div class="bar" style="--i:0"><span class="bn">CLAUDE.md</span><div class="bt"><div class="bf" style="width:37%"></div></div><span class="bv">1 078</span></div>
+        <div class="bar" style="--i:1"><span class="bn">описи скілів і агентів</span><div class="bt"><div class="bf" style="width:49%"></div></div><span class="bv">1 405</span></div>
+        <div class="bar" style="--i:2"><span class="bn">docs-inject (індекс вікі)</span><div class="bt"><div class="bf" style="width:13%"></div></div><span class="bv">366</span></div>
+        <div class="bar" style="--i:3"><span class="bn">описи команд</span><div class="bt"><div class="bf" style="width:2%"></div></div><span class="bv">42</span></div>
+      </div>
+      <p style="margin-top:12px;color:#fff;font-weight:660">Разом: 2 891 токен у кожній сесії, до першого слова.</p>
+    </div>
+    <div class="card vi an" style="--i:4">
+      <div class="t"><span class="ico vi">B</span>On-trigger — платиться при виклику</div>
+      <p style="margin-bottom:12px">Тіло SKILL.md, тіло агента і файли references, які вони реально читають. Тут можна дозволити собі обсяг — але треба знати, який.</p>
+      <div class="bars">
+        <div class="bar" style="--i:0"><span class="bn">skill-creator <span style="color:var(--rd)">(зовнішній)</span></span><div class="bt"><div class="bf rd" style="width:100%"></div></div><span class="bv">11 171</span></div>
+        <div class="bar" style="--i:1"><span class="bn">impact-analysis</span><div class="bt"><div class="bf vi" style="width:28%"></div></div><span class="bv">3 088</span></div>
+        <div class="bar" style="--i:2"><span class="bn">root-cause</span><div class="bt"><div class="bf vi" style="width:20%"></div></div><span class="bv">2 196</span></div>
+        <div class="bar" style="--i:3"><span class="bn">update-docs</span><div class="bt"><div class="bf vi" style="width:10%"></div></div><span class="bv">1 116</span></div>
+        <div class="bar" style="--i:4"><span class="bn">write-tests</span><div class="bt"><div class="bf gr" style="width:2%"></div></div><span class="bv">196</span></div>
+      </div>
+      <p style="margin-top:12px;color:var(--rd);font-weight:660">Один зовнішній скіл дорожчий за всі наші разом.</p>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Розділення always-on / on-trigger — головна методична ідея. Без нього люди оптимізують не те.</li>
+      <li>Цифри реальні, зняті інструментом <code>claude-budget.mjs</code> у нашому core-service. Оцінка — символи/4, тому важливі не абсолюти, а порівняння.</li>
+      <li>Ось і обіцяна цифра 11 171 зі слайда про антипатерни. Нагадати залі.</li>
+      <li><code>write-tests</code> на 196 токенів — приклад ідеального скіла: усе винесено в references, у тілі лише маршрут.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«Символи поділити на чотири — це ж дуже грубо»</b> Так, ±15%. Але нам і не потрібна точність: потрібне коректне порівняння до і після, а на цій метриці воно коректне.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 32. РЕАЛЬНИЙ COMPARE ═══════════ -->
+<section class="slide" data-block="Токени" data-time="1:00" data-title="Реальний вимір до / після">
+  <div class="kicker pk an" style="--i:0">Токени · результат</div>
+  <h2 class="an" style="--i:1">Три зміни за годину роботи — і ось що вийшло</h2>
+  <div class="g23 gap">
+    <div class="card hl an" style="--i:2">
+      <div class="t"><span class="ico">◆</span>Що саме зробили</div>
+      <ol class="num" style="margin-top:10px">
+        <li>Прибрали зовнішній <code class="inl">skill-creator</code> — інструмент для написання скілів, потрібен раз на місяць</li>
+        <li>Розділили <code class="inl">root-cause</code>: у SKILL.md лишилась маршрутизація, тіло процедури переїхало в <code class="inl">references/playbook.md</code></li>
+        <li>Стиснули три найдовші always-on описи, не втративши тригерні слова</li>
+      </ol>
+      <pre style="margin-top:14px"><span class="c-c"># робочий цикл</span>
+<span class="c-a">node scripts/claude-budget.mjs --baseline</span>
+<span class="c-c"># … вносимо зміни …</span>
+<span class="c-a">node scripts/claude-budget.mjs --compare</span></pre>
+    </div>
+    <div class="stack">
+      <div class="card an" style="--i:3">
+        <div class="bars">
+          <div class="bar" style="--i:0"><span class="bn">always-on</span><div class="bt"><div class="bf" style="width:96%"></div></div><span class="bv">2 891</span></div>
+          <div class="bar" style="--i:1"><span class="bn" style="color:var(--gr)">→ стало</span><div class="bt"><div class="bf gr" style="width:89%"></div></div><span class="bv">2 683</span></div>
+        </div>
+      </div>
+      <div class="card an" style="--i:4">
+        <div class="bars">
+          <div class="bar" style="--i:0"><span class="bn">root-cause</span><div class="bt"><div class="bf vi" style="width:100%"></div></div><span class="bv">2 196</span></div>
+          <div class="bar" style="--i:1"><span class="bn" style="color:var(--gr)">→ стало</span><div class="bt"><div class="bf gr" style="width:22%"></div></div><span class="bv">477</span></div>
+        </div>
+      </div>
+      <div class="card hl an" style="--i:5">
+        <div class="g3" style="gap:10px">
+          <div class="stat"><div class="v" style="font-size:clamp(19px,2.1vw,29px)">35 190</div><div class="l">було, токенів</div></div>
+          <div class="stat"><div class="v gr" style="font-size:clamp(19px,2.1vw,29px)">22 092</div><div class="l">стало</div></div>
+          <div class="stat"><div class="v cy" style="font-size:clamp(19px,2.1vw,29px)">−37%</div><div class="l">−13 098 токенів</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="lead gap an" style="--i:6">Жодного рядка інструкцій не втрачено — усе, що прибрали з гарячого шляху, лежить поруч і читається за потреби. <em>Це не економія на якості. Це прибирання.</em></p>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Це кульмінація блоку. Не поспішати, дати цифрам повисіти.</li>
+      <li>Наголосити: жоден інструктивний рядок не видалений. <code>root-cause</code> просто переїхав на рівень 3.</li>
+      <li>Чесно сказати: найбільший шматок економії — це видалення зовнішнього скіла, тобто просто прибирання того, що ми самі притягли й не поміряли.</li>
+      <li>Донести головне: <b>−37% за годину роботи — це те, що може зробити будь-хто в залі у своєму проєкті вже завтра.</b></li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«А якість не впала?»</b> Перевіряється не вірою, а прогоном тих самих задач до і після. У випадку root-cause процедура ідентична — змінилось лише те, коли вона читається.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 33. 7 ВАЖЕЛІВ ═══════════ -->
+<section class="slide" data-block="Токени" data-time="0:55" data-title="Сім важелів економії">
+  <div class="kicker pk an" style="--i:0">Токени · інструменти</div>
+  <h2 class="an" style="--i:1">Сім важелів — і що не можна чіпати</h2>
+  <div class="g4 gap">
+    <div class="card an" style="--i:2"><div class="t" style="font-size:14px"><span class="ico">1</span>Progressive disclosure</div><p>Три рівні скіла. Найбільший ефект на найменших зусиллях.</p></div>
+    <div class="card an" style="--i:3"><div class="t" style="font-size:14px"><span class="ico vi">2</span>Ізольований сабагент</div><p>Він читає 30 файлів у себе, вам віддає абзац.</p></div>
+    <div class="card an" style="--i:4"><div class="t" style="font-size:14px"><span class="ico gr">3</span>Модель під роль</div><p>Класифікація — найменша модель. Різниця в десятки разів.</p></div>
+    <div class="card an" style="--i:5"><div class="t" style="font-size:14px"><span class="ico am">4</span>Детермінізм у скрипт</div><p>Найдешевші токени — ті, яких немає.</p></div>
+    <div class="card an" style="--i:6"><div class="t" style="font-size:14px"><span class="ico bl">5</span>Prompt caching</div><p>Стабільний префікс контексту — не міняйте його без потреби.</p></div>
+    <div class="card an" style="--i:7"><div class="t" style="font-size:14px"><span class="ico pk">6</span>Точковий запит</div><p>Конкретні поля замість «віддай усе».</p></div>
+    <div class="card an" style="--i:8"><div class="t" style="font-size:14px"><span class="ico">7</span>Зовнішня памʼять</div><p>Вікі й файли замість роздутої історії в вікні.</p></div>
+    <div class="card rd an" style="--i:9"><div class="t" style="font-size:14px"><span class="ico rd">✕</span>Не економити на</div><p>Критеріях приймання. Прикладах входу-виходу. Кроці верифікації.</p></div>
+  </div>
+  <div class="card am gap2 an" style="--i:10">
+    <p><b>Живий приклад важеля №6 з нашого скіла:</b> <code class="inl">getJiraIssue</code> викликається зі списком конкретних полів, і в інструкції прямо написано <i>«ніколи не <code class="inl">*all</code> — цей payload величезний»</i>. Одне речення в скілі, яке економить тисячі токенів у кожному виклику.</p>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Пройти швидко по номерах, зупинитись на 4 і 7.</li>
+      <li>Важіль 5 неочевидний: якщо ви щоразу міняєте початок контексту, кеш не працює. Стабільний префікс — безкоштовна економія.</li>
+      <li>Червона картка — найважливіша. Економія на критеріях приймання повертається переробками, які дорожчі за будь-які токени.</li>
+      <li>Фінальна плашка показує, що правило народжується з болю і фіксується одним реченням у скілі.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 34. ПРОБЛЕМА МАСШТАБУ ═══════════ -->
+<section class="slide" data-block="Контекст проєкту" data-time="0:45" data-title="Проблема масштабу">
+  <div class="kicker bl an" style="--i:0">Блок 6 · Контекст проєкту</div>
+  <h2 class="an" style="--i:1">Агенту потрібна карта, а не територія</h2>
+  <div class="g23 gap">
+    <div>
+      <p class="lead an" style="--i:2">Один із наших репозиторіїв: <b>1 002 файли, ~616 500 слів</b>. Це більше, ніж будь-яке вікно контексту, і значно більше, ніж варто читати.</p>
+      <p class="lead gap an" style="--i:3">Питання не в тому, як засунути проєкт у модель. Питання в тому, <em>як дати їй орієнтуватись, не читаючи все</em>.</p>
+      <div class="g2 gap2">
+        <div class="stat an" style="--i:4"><div class="v bl">1 002</div><div class="l">файли в репозиторії</div></div>
+        <div class="stat an" style="--i:5"><div class="v bl">616 500</div><div class="l">слів — близько 800 тис. токенів</div></div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card hl an" style="--i:4"><div class="t"><span class="ico">1</span>Граф коду</div><p>Механічні звʼязки: хто кого імпортує, що на що впливає. Відповідає на питання <b>«де»</b>.</p></div>
+      <div class="card vi an" style="--i:5"><div class="t"><span class="ico vi">2</span>LLM wiki</div><p>Смисли, яких немає в коді: інваріанти, контракти, «чому саме так». Відповідає на питання <b>«чому»</b>.</p></div>
+      <div class="card gr an" style="--i:6"><div class="t"><span class="ico gr">3</span>Пошук на вимогу</div><p>grep і читання конкретного файлу. Відповідає на питання <b>«як саме»</b>.</p></div>
+      <div class="card an" style="--i:7"><p style="color:var(--tx2)">Вони не конкурують. Граф каже, куди дивитись; вікі каже, що там важливо; пошук дає точні деталі.</p></div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Цифра 616 500 слів — це приблизно 800 тисяч токенів, тобто в 4 рази більше за вікно. Сказати вголос, вона вражає.</li>
+      <li>Три стратегії й три питання — «де / чому / як саме» — це каркас, який легко запамʼятати.</li>
+      <li>Найчастіша помилка: намагатись замінити одне іншим. Вікі не замінює граф, граф не замінює читання коду.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 35. ГРАФ ═══════════ -->
+<section class="slide" data-block="Контекст проєкту" data-time="1:00" data-title="Граф коду через graphify">
+  <div class="kicker bl an" style="--i:0">Контекст · граф коду</div>
+  <h2 class="an" style="--i:1">Граф файлів: 2 717 вузлів, 3 772 звʼязки, 337 спільнот</h2>
+  <div class="g23 gap" style="align-items:start">
+    <div class="card fade" style="--i:2;padding:10px">
+      <svg class="graphsvg" viewBox="0 0 1000 560" role="img" aria-label="Граф коду: кластери, звʼязки, хаби">
+<g class="g-edges">
+<line x1="263" y1="217" x2="314" y2="139" stroke="#35e0e8" style="--d:0ms"/>
+<line x1="300" y1="207" x2="268" y2="181" stroke="#35e0e8" style="--d:18ms"/>
+<line x1="285" y1="156" x2="247" y2="135" stroke="#35e0e8" style="--d:36ms"/>
+<line x1="263" y1="217" x2="329" y2="126" stroke="#35e0e8" style="--d:54ms"/>
+<line x1="360" y1="196" x2="389" y2="202" stroke="#35e0e8" style="--d:72ms"/>
+<line x1="263" y1="217" x2="285" y2="156" stroke="#35e0e8" style="--d:90ms"/>
+<line x1="263" y1="217" x2="271" y2="215" stroke="#35e0e8" style="--d:108ms"/>
+<line x1="263" y1="217" x2="331" y2="110" stroke="#35e0e8" style="--d:126ms"/>
+<line x1="263" y1="217" x2="247" y2="237" stroke="#35e0e8" style="--d:144ms"/>
+<line x1="247" y1="237" x2="334" y2="239" stroke="#35e0e8" style="--d:162ms"/>
+<line x1="263" y1="217" x2="365" y2="142" stroke="#35e0e8" style="--d:180ms"/>
+<line x1="389" y1="202" x2="229" y2="159" stroke="#35e0e8" style="--d:198ms"/>
+<line x1="229" y1="159" x2="337" y2="215" stroke="#35e0e8" style="--d:216ms"/>
+<line x1="263" y1="217" x2="387" y2="229" stroke="#35e0e8" style="--d:234ms"/>
+<line x1="335" y1="238" x2="197" y2="177" stroke="#35e0e8" style="--d:252ms"/>
+<line x1="263" y1="217" x2="315" y2="104" stroke="#35e0e8" style="--d:270ms"/>
+<line x1="197" y1="177" x2="360" y2="196" stroke="#35e0e8" style="--d:288ms"/>
+<line x1="263" y1="217" x2="300" y2="144" stroke="#35e0e8" style="--d:306ms"/>
+<line x1="263" y1="217" x2="219" y2="198" stroke="#35e0e8" style="--d:324ms"/>
+<line x1="268" y1="181" x2="262" y2="189" stroke="#35e0e8" style="--d:342ms"/>
+<line x1="300" y1="207" x2="335" y2="238" stroke="#35e0e8" style="--d:360ms"/>
+<line x1="268" y1="152" x2="299" y2="222" stroke="#35e0e8" style="--d:378ms"/>
+<line x1="263" y1="217" x2="268" y2="152" stroke="#35e0e8" style="--d:396ms"/>
+<line x1="247" y1="135" x2="300" y2="207" stroke="#35e0e8" style="--d:414ms"/>
+<line x1="216" y1="165" x2="216" y2="165" stroke="#35e0e8" style="--d:432ms"/>
+<line x1="315" y1="104" x2="335" y2="238" stroke="#35e0e8" style="--d:450ms"/>
+<line x1="300" y1="144" x2="262" y2="189" stroke="#35e0e8" style="--d:468ms"/>
+<line x1="247" y1="135" x2="216" y2="165" stroke="#35e0e8" style="--d:486ms"/>
+<line x1="315" y1="104" x2="331" y2="110" stroke="#35e0e8" style="--d:504ms"/>
+<line x1="268" y1="152" x2="262" y2="189" stroke="#35e0e8" style="--d:522ms"/>
+<line x1="365" y1="142" x2="229" y2="159" stroke="#35e0e8" style="--d:540ms"/>
+<line x1="365" y1="142" x2="334" y2="239" stroke="#35e0e8" style="--d:558ms"/>
+<line x1="263" y1="217" x2="219" y2="198" stroke="#35e0e8" style="--d:576ms"/>
+<line x1="271" y1="215" x2="300" y2="144" stroke="#35e0e8" style="--d:594ms"/>
+<line x1="300" y1="144" x2="219" y2="198" stroke="#35e0e8" style="--d:612ms"/>
+<line x1="335" y1="238" x2="271" y2="215" stroke="#35e0e8" style="--d:630ms"/>
+<line x1="262" y1="189" x2="219" y2="198" stroke="#35e0e8" style="--d:648ms"/>
+<line x1="299" y1="222" x2="335" y2="238" stroke="#35e0e8" style="--d:666ms"/>
+<line x1="760" y1="219" x2="674" y2="115" stroke="#8b6cf6" style="--d:684ms"/>
+<line x1="760" y1="219" x2="702" y2="122" stroke="#8b6cf6" style="--d:702ms"/>
+<line x1="856" y1="189" x2="863" y2="147" stroke="#8b6cf6" style="--d:0ms"/>
+<line x1="760" y1="219" x2="778" y2="115" stroke="#8b6cf6" style="--d:18ms"/>
+<line x1="760" y1="219" x2="706" y2="69" stroke="#8b6cf6" style="--d:36ms"/>
+<line x1="760" y1="219" x2="652" y2="178" stroke="#8b6cf6" style="--d:54ms"/>
+<line x1="760" y1="219" x2="673" y2="167" stroke="#8b6cf6" style="--d:72ms"/>
+<line x1="760" y1="219" x2="786" y2="79" stroke="#8b6cf6" style="--d:90ms"/>
+<line x1="760" y1="219" x2="751" y2="111" stroke="#8b6cf6" style="--d:108ms"/>
+<line x1="778" y1="115" x2="882" y2="147" stroke="#8b6cf6" style="--d:126ms"/>
+<line x1="747" y1="65" x2="740" y2="199" stroke="#8b6cf6" style="--d:144ms"/>
+<line x1="831" y1="105" x2="733" y2="162" stroke="#8b6cf6" style="--d:162ms"/>
+<line x1="686" y1="96" x2="831" y2="105" stroke="#8b6cf6" style="--d:180ms"/>
+<line x1="760" y1="219" x2="765" y2="56" stroke="#8b6cf6" style="--d:198ms"/>
+<line x1="760" y1="219" x2="683" y2="148" stroke="#8b6cf6" style="--d:216ms"/>
+<line x1="760" y1="219" x2="835" y2="154" stroke="#8b6cf6" style="--d:234ms"/>
+<line x1="760" y1="219" x2="836" y2="187" stroke="#8b6cf6" style="--d:252ms"/>
+<line x1="856" y1="189" x2="730" y2="91" stroke="#8b6cf6" style="--d:270ms"/>
+<line x1="760" y1="219" x2="856" y2="189" stroke="#8b6cf6" style="--d:288ms"/>
+<line x1="730" y1="128" x2="747" y2="65" stroke="#8b6cf6" style="--d:306ms"/>
+<line x1="702" y1="122" x2="745" y2="118" stroke="#8b6cf6" style="--d:324ms"/>
+<line x1="706" y1="69" x2="730" y2="128" stroke="#8b6cf6" style="--d:342ms"/>
+<line x1="760" y1="219" x2="821" y2="67" stroke="#8b6cf6" style="--d:360ms"/>
+<line x1="882" y1="147" x2="648" y2="115" stroke="#8b6cf6" style="--d:378ms"/>
+<line x1="760" y1="219" x2="697" y2="101" stroke="#8b6cf6" style="--d:396ms"/>
+<line x1="760" y1="219" x2="686" y2="96" stroke="#8b6cf6" style="--d:414ms"/>
+<line x1="760" y1="219" x2="670" y2="154" stroke="#8b6cf6" style="--d:432ms"/>
+<line x1="760" y1="219" x2="777" y2="218" stroke="#8b6cf6" style="--d:450ms"/>
+<line x1="673" y1="167" x2="871" y2="175" stroke="#8b6cf6" style="--d:468ms"/>
+<line x1="777" y1="218" x2="747" y2="65" stroke="#8b6cf6" style="--d:486ms"/>
+<line x1="706" y1="69" x2="777" y2="218" stroke="#8b6cf6" style="--d:504ms"/>
+<line x1="765" y1="56" x2="882" y2="147" stroke="#8b6cf6" style="--d:522ms"/>
+<line x1="863" y1="147" x2="648" y2="115" stroke="#8b6cf6" style="--d:540ms"/>
+<line x1="733" y1="162" x2="683" y2="148" stroke="#8b6cf6" style="--d:558ms"/>
+<line x1="648" y1="115" x2="674" y2="115" stroke="#8b6cf6" style="--d:576ms"/>
+<line x1="777" y1="218" x2="673" y2="167" stroke="#8b6cf6" style="--d:594ms"/>
+<line x1="856" y1="189" x2="745" y2="118" stroke="#8b6cf6" style="--d:612ms"/>
+<line x1="652" y1="178" x2="821" y2="67" stroke="#8b6cf6" style="--d:630ms"/>
+<line x1="751" y1="111" x2="683" y2="148" stroke="#8b6cf6" style="--d:648ms"/>
+<line x1="670" y1="154" x2="745" y2="118" stroke="#8b6cf6" style="--d:666ms"/>
+<line x1="730" y1="91" x2="683" y2="148" stroke="#8b6cf6" style="--d:684ms"/>
+<line x1="686" y1="96" x2="747" y2="65" stroke="#8b6cf6" style="--d:702ms"/>
+<line x1="765" y1="56" x2="706" y2="69" stroke="#8b6cf6" style="--d:0ms"/>
+<line x1="648" y1="115" x2="740" y2="199" stroke="#8b6cf6" style="--d:18ms"/>
+<line x1="132" y1="404" x2="253" y2="404" stroke="#4ade80" style="--d:36ms"/>
+<line x1="168" y1="401" x2="233" y2="435" stroke="#4ade80" style="--d:54ms"/>
+<line x1="185" y1="366" x2="125" y2="455" stroke="#4ade80" style="--d:72ms"/>
+<line x1="132" y1="404" x2="247" y2="435" stroke="#4ade80" style="--d:90ms"/>
+<line x1="132" y1="404" x2="185" y2="366" stroke="#4ade80" style="--d:108ms"/>
+<line x1="132" y1="404" x2="249" y2="413" stroke="#4ade80" style="--d:126ms"/>
+<line x1="132" y1="404" x2="132" y2="446" stroke="#4ade80" style="--d:144ms"/>
+<line x1="132" y1="404" x2="129" y2="464" stroke="#4ade80" style="--d:162ms"/>
+<line x1="132" y1="404" x2="226" y2="437" stroke="#4ade80" style="--d:180ms"/>
+<line x1="132" y1="404" x2="290" y2="431" stroke="#4ade80" style="--d:198ms"/>
+<line x1="145" y1="437" x2="145" y2="437" stroke="#4ade80" style="--d:216ms"/>
+<line x1="132" y1="404" x2="299" y2="424" stroke="#4ade80" style="--d:234ms"/>
+<line x1="248" y1="446" x2="204" y2="445" stroke="#4ade80" style="--d:252ms"/>
+<line x1="132" y1="404" x2="181" y2="455" stroke="#4ade80" style="--d:270ms"/>
+<line x1="132" y1="404" x2="248" y2="446" stroke="#4ade80" style="--d:288ms"/>
+<line x1="132" y1="404" x2="143" y2="422" stroke="#4ade80" style="--d:306ms"/>
+<line x1="132" y1="404" x2="127" y2="379" stroke="#4ade80" style="--d:324ms"/>
+<line x1="132" y1="404" x2="168" y2="401" stroke="#4ade80" style="--d:342ms"/>
+<line x1="132" y1="404" x2="233" y2="367" stroke="#4ade80" style="--d:360ms"/>
+<line x1="247" y1="435" x2="129" y2="464" stroke="#4ade80" style="--d:378ms"/>
+<line x1="181" y1="455" x2="132" y2="446" stroke="#4ade80" style="--d:396ms"/>
+<line x1="168" y1="401" x2="204" y2="445" stroke="#4ade80" style="--d:414ms"/>
+<line x1="132" y1="446" x2="143" y2="422" stroke="#4ade80" style="--d:432ms"/>
+<line x1="204" y1="445" x2="132" y2="404" stroke="#4ade80" style="--d:450ms"/>
+<line x1="290" y1="431" x2="226" y2="437" stroke="#4ade80" style="--d:468ms"/>
+<line x1="226" y1="437" x2="145" y2="437" stroke="#4ade80" style="--d:486ms"/>
+<line x1="204" y1="445" x2="247" y2="435" stroke="#4ade80" style="--d:504ms"/>
+<line x1="299" y1="424" x2="185" y2="366" stroke="#4ade80" style="--d:522ms"/>
+<line x1="233" y1="367" x2="132" y2="404" stroke="#4ade80" style="--d:540ms"/>
+<line x1="568" y1="327" x2="429" y2="339" stroke="#f59e0b" style="--d:558ms"/>
+<line x1="532" y1="286" x2="432" y2="338" stroke="#f59e0b" style="--d:576ms"/>
+<line x1="568" y1="327" x2="437" y2="309" stroke="#f59e0b" style="--d:594ms"/>
+<line x1="568" y1="327" x2="547" y2="352" stroke="#f59e0b" style="--d:612ms"/>
+<line x1="568" y1="327" x2="448" y2="364" stroke="#f59e0b" style="--d:630ms"/>
+<line x1="568" y1="327" x2="575" y2="326" stroke="#f59e0b" style="--d:648ms"/>
+<line x1="477" y1="356" x2="554" y2="297" stroke="#f59e0b" style="--d:666ms"/>
+<line x1="568" y1="327" x2="578" y2="348" stroke="#f59e0b" style="--d:684ms"/>
+<line x1="568" y1="327" x2="501" y2="279" stroke="#f59e0b" style="--d:702ms"/>
+<line x1="568" y1="327" x2="490" y2="359" stroke="#f59e0b" style="--d:0ms"/>
+<line x1="568" y1="327" x2="532" y2="286" stroke="#f59e0b" style="--d:18ms"/>
+<line x1="568" y1="327" x2="459" y2="299" stroke="#f59e0b" style="--d:36ms"/>
+<line x1="490" y1="359" x2="462" y2="293" stroke="#f59e0b" style="--d:54ms"/>
+<line x1="429" y1="339" x2="477" y2="356" stroke="#f59e0b" style="--d:72ms"/>
+<line x1="462" y1="293" x2="482" y2="311" stroke="#f59e0b" style="--d:90ms"/>
+<line x1="568" y1="327" x2="463" y2="344" stroke="#f59e0b" style="--d:108ms"/>
+<line x1="437" y1="309" x2="573" y2="377" stroke="#f59e0b" style="--d:126ms"/>
+<line x1="532" y1="286" x2="459" y2="299" stroke="#f59e0b" style="--d:144ms"/>
+<line x1="448" y1="364" x2="462" y2="293" stroke="#f59e0b" style="--d:162ms"/>
+<line x1="463" y1="344" x2="532" y2="286" stroke="#f59e0b" style="--d:180ms"/>
+<line x1="459" y1="299" x2="501" y2="279" stroke="#f59e0b" style="--d:198ms"/>
+<line x1="463" y1="344" x2="501" y2="279" stroke="#f59e0b" style="--d:216ms"/>
+<line x1="463" y1="344" x2="437" y2="309" stroke="#f59e0b" style="--d:234ms"/>
+<line x1="462" y1="293" x2="448" y2="364" stroke="#f59e0b" style="--d:252ms"/>
+<line x1="477" y1="356" x2="547" y2="352" stroke="#f59e0b" style="--d:270ms"/>
+<line x1="575" y1="326" x2="462" y2="293" stroke="#f59e0b" style="--d:288ms"/>
+<line x1="762" y1="419" x2="788" y2="428" stroke="#f472b6" style="--d:306ms"/>
+<line x1="756" y1="402" x2="778" y2="424" stroke="#f472b6" style="--d:324ms"/>
+<line x1="826" y1="434" x2="838" y2="381" stroke="#f472b6" style="--d:342ms"/>
+<line x1="762" y1="419" x2="816" y2="433" stroke="#f472b6" style="--d:360ms"/>
+<line x1="778" y1="424" x2="862" y2="417" stroke="#f472b6" style="--d:378ms"/>
+<line x1="762" y1="419" x2="850" y2="435" stroke="#f472b6" style="--d:396ms"/>
+<line x1="762" y1="419" x2="860" y2="397" stroke="#f472b6" style="--d:414ms"/>
+<line x1="897" y1="437" x2="771" y2="455" stroke="#f472b6" style="--d:432ms"/>
+<line x1="762" y1="419" x2="834" y2="462" stroke="#f472b6" style="--d:450ms"/>
+<line x1="788" y1="428" x2="756" y2="402" stroke="#f472b6" style="--d:468ms"/>
+<line x1="834" y1="462" x2="897" y2="437" stroke="#f472b6" style="--d:486ms"/>
+<line x1="762" y1="419" x2="773" y2="400" stroke="#f472b6" style="--d:504ms"/>
+<line x1="834" y1="462" x2="897" y2="433" stroke="#f472b6" style="--d:522ms"/>
+<line x1="762" y1="419" x2="895" y2="419" stroke="#f472b6" style="--d:540ms"/>
+<line x1="838" y1="381" x2="826" y2="434" stroke="#f472b6" style="--d:558ms"/>
+<line x1="771" y1="455" x2="897" y2="437" stroke="#f472b6" style="--d:576ms"/>
+<line x1="771" y1="455" x2="895" y2="419" stroke="#f472b6" style="--d:594ms"/>
+<line x1="773" y1="400" x2="834" y2="462" stroke="#f472b6" style="--d:612ms"/>
+<line x1="862" y1="417" x2="834" y2="462" stroke="#f472b6" style="--d:630ms"/>
+<line x1="862" y1="417" x2="771" y2="455" stroke="#f472b6" style="--d:648ms"/>
+<line x1="838" y1="381" x2="862" y2="417" stroke="#f472b6" style="--d:666ms"/>
+<line x1="897" y1="437" x2="756" y2="402" stroke="#f472b6" style="--d:684ms"/>
+<line x1="850" y1="435" x2="778" y2="424" stroke="#f472b6" style="--d:702ms"/>
+<line x1="506" y1="149" x2="445" y2="136" stroke="#60a5fa" style="--d:0ms"/>
+<line x1="506" y1="149" x2="506" y2="72" stroke="#60a5fa" style="--d:18ms"/>
+<line x1="445" y1="136" x2="409" y2="141" stroke="#60a5fa" style="--d:36ms"/>
+<line x1="536" y1="141" x2="536" y2="141" stroke="#60a5fa" style="--d:54ms"/>
+<line x1="506" y1="149" x2="454" y2="87" stroke="#60a5fa" style="--d:72ms"/>
+<line x1="545" y1="96" x2="563" y2="127" stroke="#60a5fa" style="--d:90ms"/>
+<line x1="522" y1="103" x2="522" y2="103" stroke="#60a5fa" style="--d:108ms"/>
+<line x1="506" y1="149" x2="504" y2="103" stroke="#60a5fa" style="--d:126ms"/>
+<line x1="506" y1="149" x2="527" y2="146" stroke="#60a5fa" style="--d:144ms"/>
+<line x1="506" y1="149" x2="545" y2="96" stroke="#60a5fa" style="--d:162ms"/>
+<line x1="504" y1="103" x2="472" y2="141" stroke="#60a5fa" style="--d:180ms"/>
+<line x1="506" y1="149" x2="471" y2="99" stroke="#60a5fa" style="--d:198ms"/>
+<line x1="506" y1="149" x2="448" y2="95" stroke="#60a5fa" style="--d:216ms"/>
+<line x1="506" y1="149" x2="454" y2="87" stroke="#60a5fa" style="--d:234ms"/>
+<line x1="522" y1="103" x2="471" y2="99" stroke="#60a5fa" style="--d:252ms"/>
+<line x1="527" y1="146" x2="506" y2="72" stroke="#60a5fa" style="--d:270ms"/>
+<line x1="545" y1="96" x2="563" y2="127" stroke="#60a5fa" style="--d:288ms"/>
+<line x1="445" y1="136" x2="504" y2="103" stroke="#60a5fa" style="--d:306ms"/>
+<line x1="527" y1="146" x2="504" y2="103" stroke="#60a5fa" style="--d:324ms"/>
+<line x1="536" y1="141" x2="471" y2="99" stroke="#60a5fa" style="--d:342ms"/>
+<line x1="162" y1="235" x2="170" y2="282" stroke="#fb7185" style="--d:360ms"/>
+<line x1="172" y1="285" x2="124" y2="296" stroke="#fb7185" style="--d:378ms"/>
+<line x1="172" y1="285" x2="97" y2="297" stroke="#fb7185" style="--d:396ms"/>
+<line x1="97" y1="297" x2="111" y2="222" stroke="#fb7185" style="--d:414ms"/>
+<line x1="52" y1="297" x2="162" y2="235" stroke="#fb7185" style="--d:432ms"/>
+<line x1="52" y1="297" x2="140" y2="258" stroke="#fb7185" style="--d:450ms"/>
+<line x1="172" y1="285" x2="175" y2="265" stroke="#fb7185" style="--d:468ms"/>
+<line x1="131" y1="229" x2="131" y2="229" stroke="#fb7185" style="--d:486ms"/>
+<line x1="175" y1="265" x2="172" y2="285" stroke="#fb7185" style="--d:504ms"/>
+<line x1="52" y1="297" x2="170" y2="258" stroke="#fb7185" style="--d:522ms"/>
+<line x1="52" y1="297" x2="87" y2="229" stroke="#fb7185" style="--d:540ms"/>
+<line x1="162" y1="235" x2="170" y2="282" stroke="#fb7185" style="--d:558ms"/>
+<line x1="172" y1="285" x2="170" y2="258" stroke="#fb7185" style="--d:576ms"/>
+<line x1="52" y1="297" x2="170" y2="282" stroke="#fb7185" style="--d:594ms"/>
+<line x1="111" y1="222" x2="131" y2="229" stroke="#fb7185" style="--d:612ms"/>
+<line x1="162" y1="235" x2="131" y2="229" stroke="#fb7185" style="--d:630ms"/>
+<line x1="175" y1="265" x2="170" y2="258" stroke="#fb7185" style="--d:648ms"/>
+</g><g class="g-bridges">
+<path d="M216 165 Q544 130 871 175" style="--d:600ms"/>
+<path d="M263 217 Q547 121 831 105" style="--d:645ms"/>
+<path d="M247 135 Q472 78 697 101" style="--d:690ms"/>
+<path d="M314 139 Q444 193 575 326" style="--d:735ms"/>
+<path d="M299 222 Q400 210 501 279" style="--d:780ms"/>
+<path d="M299 222 Q379 220 459 299" style="--d:825ms"/>
+<path d="M247 135 Q376 63 506 72" style="--d:870ms"/>
+<path d="M132 404 Q296 311 459 299" style="--d:915ms"/>
+<path d="M204 445 Q183 300 162 235" style="--d:960ms"/>
+<path d="M290 431 Q188 290 87 229" style="--d:1005ms"/>
+<path d="M233 367 Q178 291 124 296" style="--d:1050ms"/>
+<path d="M459 299 Q643 326 826 434" style="--d:1095ms"/>
+<path d="M706 69 Q738 222 771 455" style="--d:1140ms"/>
+<path d="M670 154 Q721 237 773 400" style="--d:1185ms"/>
+<path d="M263 217 Q255 291 248 446" style="--d:1230ms"/>
+<path d="M216 165 Q174 244 132 404" style="--d:1275ms"/>
+<path d="M329 126 Q277 241 226 437" style="--d:1320ms"/>
+<path d="M462 293 Q436 177 409 141" style="--d:1365ms"/>
+<path d="M501 279 Q455 170 409 141" style="--d:1410ms"/>
+<path d="M578 348 Q562 182 545 96" style="--d:1455ms"/>
+<path d="M185 366 Q273 241 360 196" style="--d:1500ms"/>
+<path d="M132 446 Q202 291 271 215" style="--d:1545ms"/>
+<path d="M185 366 Q243 215 300 144" style="--d:1590ms"/>
+</g><g class="g-nodes">
+<circle cx="263" cy="217" r="8.1" fill="#35e0e8" style="--d:0ms"/>
+<circle cx="314" cy="139" r="3.0" fill="#35e0e8" style="--d:9ms"/>
+<circle cx="268" cy="181" r="3.0" fill="#35e0e8" style="--d:18ms"/>
+<circle cx="247" cy="135" r="4.3" fill="#35e0e8" style="--d:27ms"/>
+<circle cx="329" cy="126" r="3.0" fill="#35e0e8" style="--d:36ms"/>
+<circle cx="389" cy="202" r="3.0" fill="#35e0e8" style="--d:45ms"/>
+<circle cx="285" cy="156" r="3.0" fill="#35e0e8" style="--d:54ms"/>
+<circle cx="271" cy="215" r="3.9" fill="#35e0e8" style="--d:63ms"/>
+<circle cx="331" cy="110" r="3.0" fill="#35e0e8" style="--d:72ms"/>
+<circle cx="247" cy="237" r="3.0" fill="#35e0e8" style="--d:81ms"/>
+<circle cx="334" cy="239" r="3.0" fill="#35e0e8" style="--d:90ms"/>
+<circle cx="365" cy="142" r="3.5" fill="#35e0e8" style="--d:99ms"/>
+<circle cx="229" cy="159" r="3.5" fill="#35e0e8" style="--d:108ms"/>
+<circle cx="337" cy="215" r="2.6" fill="#35e0e8" style="--d:117ms"/>
+<circle cx="387" cy="229" r="2.6" fill="#35e0e8" style="--d:126ms"/>
+<circle cx="197" cy="177" r="3.0" fill="#35e0e8" style="--d:135ms"/>
+<circle cx="315" cy="104" r="3.5" fill="#35e0e8" style="--d:144ms"/>
+<circle cx="360" cy="196" r="3.5" fill="#35e0e8" style="--d:153ms"/>
+<circle cx="300" cy="144" r="4.3" fill="#35e0e8" style="--d:162ms"/>
+<circle cx="219" cy="198" r="3.9" fill="#35e0e8" style="--d:171ms"/>
+<circle cx="262" cy="189" r="3.9" fill="#35e0e8" style="--d:180ms"/>
+<circle cx="335" cy="238" r="4.3" fill="#35e0e8" style="--d:189ms"/>
+<circle cx="299" cy="222" r="3.9" fill="#35e0e8" style="--d:198ms"/>
+<circle cx="268" cy="152" r="3.5" fill="#35e0e8" style="--d:207ms"/>
+<circle cx="300" cy="207" r="3.5" fill="#35e0e8" style="--d:216ms"/>
+<circle cx="216" cy="165" r="4.3" fill="#35e0e8" style="--d:225ms"/>
+<circle cx="760" cy="219" r="8.1" fill="#8b6cf6" style="--d:234ms"/>
+<circle cx="674" cy="115" r="3.0" fill="#8b6cf6" style="--d:243ms"/>
+<circle cx="702" cy="122" r="3.0" fill="#8b6cf6" style="--d:252ms"/>
+<circle cx="863" cy="147" r="3.0" fill="#8b6cf6" style="--d:261ms"/>
+<circle cx="778" cy="115" r="3.0" fill="#8b6cf6" style="--d:270ms"/>
+<circle cx="706" cy="69" r="4.3" fill="#8b6cf6" style="--d:279ms"/>
+<circle cx="652" cy="178" r="3.0" fill="#8b6cf6" style="--d:288ms"/>
+<circle cx="673" cy="167" r="3.5" fill="#8b6cf6" style="--d:297ms"/>
+<circle cx="786" cy="79" r="2.6" fill="#8b6cf6" style="--d:306ms"/>
+<circle cx="751" cy="111" r="3.0" fill="#8b6cf6" style="--d:315ms"/>
+<circle cx="882" cy="147" r="3.5" fill="#8b6cf6" style="--d:324ms"/>
+<circle cx="740" cy="199" r="3.0" fill="#8b6cf6" style="--d:333ms"/>
+<circle cx="733" cy="162" r="3.0" fill="#8b6cf6" style="--d:342ms"/>
+<circle cx="831" cy="105" r="3.5" fill="#8b6cf6" style="--d:351ms"/>
+<circle cx="765" cy="56" r="3.5" fill="#8b6cf6" style="--d:360ms"/>
+<circle cx="683" cy="148" r="3.9" fill="#8b6cf6" style="--d:369ms"/>
+<circle cx="835" cy="154" r="2.6" fill="#8b6cf6" style="--d:378ms"/>
+<circle cx="836" cy="187" r="2.6" fill="#8b6cf6" style="--d:387ms"/>
+<circle cx="730" cy="91" r="3.0" fill="#8b6cf6" style="--d:396ms"/>
+<circle cx="856" cy="189" r="3.9" fill="#8b6cf6" style="--d:405ms"/>
+<circle cx="747" cy="65" r="3.9" fill="#8b6cf6" style="--d:414ms"/>
+<circle cx="745" cy="118" r="3.5" fill="#8b6cf6" style="--d:423ms"/>
+<circle cx="730" cy="128" r="3.0" fill="#8b6cf6" style="--d:432ms"/>
+<circle cx="821" cy="67" r="3.0" fill="#8b6cf6" style="--d:441ms"/>
+<circle cx="648" cy="115" r="3.9" fill="#8b6cf6" style="--d:450ms"/>
+<circle cx="697" cy="101" r="3.0" fill="#8b6cf6" style="--d:459ms"/>
+<circle cx="686" cy="96" r="3.5" fill="#8b6cf6" style="--d:468ms"/>
+<circle cx="670" cy="154" r="3.5" fill="#8b6cf6" style="--d:477ms"/>
+<circle cx="777" cy="218" r="3.9" fill="#8b6cf6" style="--d:486ms"/>
+<circle cx="871" cy="175" r="3.0" fill="#8b6cf6" style="--d:495ms"/>
+<circle cx="132" cy="404" r="8.1" fill="#4ade80" style="--d:504ms"/>
+<circle cx="253" cy="404" r="2.6" fill="#4ade80" style="--d:513ms"/>
+<circle cx="233" cy="435" r="2.6" fill="#4ade80" style="--d:522ms"/>
+<circle cx="125" cy="455" r="2.6" fill="#4ade80" style="--d:531ms"/>
+<circle cx="247" cy="435" r="3.5" fill="#4ade80" style="--d:540ms"/>
+<circle cx="185" cy="366" r="4.3" fill="#4ade80" style="--d:549ms"/>
+<circle cx="249" cy="413" r="2.6" fill="#4ade80" style="--d:558ms"/>
+<circle cx="132" cy="446" r="3.9" fill="#4ade80" style="--d:567ms"/>
+<circle cx="129" cy="464" r="3.0" fill="#4ade80" style="--d:576ms"/>
+<circle cx="226" cy="437" r="3.9" fill="#4ade80" style="--d:585ms"/>
+<circle cx="290" cy="431" r="3.5" fill="#4ade80" style="--d:594ms"/>
+<circle cx="145" cy="437" r="3.5" fill="#4ade80" style="--d:603ms"/>
+<circle cx="299" cy="424" r="3.0" fill="#4ade80" style="--d:612ms"/>
+<circle cx="204" cy="445" r="4.3" fill="#4ade80" style="--d:621ms"/>
+<circle cx="181" cy="455" r="3.0" fill="#4ade80" style="--d:630ms"/>
+<circle cx="248" cy="446" r="3.5" fill="#4ade80" style="--d:639ms"/>
+<circle cx="143" cy="422" r="3.0" fill="#4ade80" style="--d:648ms"/>
+<circle cx="127" cy="379" r="2.6" fill="#4ade80" style="--d:657ms"/>
+<circle cx="168" cy="401" r="3.5" fill="#4ade80" style="--d:666ms"/>
+<circle cx="233" cy="367" r="3.5" fill="#4ade80" style="--d:675ms"/>
+<circle cx="568" cy="327" r="6.8" fill="#f59e0b" style="--d:684ms"/>
+<circle cx="429" cy="339" r="3.0" fill="#f59e0b" style="--d:693ms"/>
+<circle cx="432" cy="338" r="2.6" fill="#f59e0b" style="--d:702ms"/>
+<circle cx="437" cy="309" r="3.5" fill="#f59e0b" style="--d:711ms"/>
+<circle cx="547" cy="352" r="3.0" fill="#f59e0b" style="--d:720ms"/>
+<circle cx="448" cy="364" r="3.5" fill="#f59e0b" style="--d:729ms"/>
+<circle cx="575" cy="326" r="3.5" fill="#f59e0b" style="--d:738ms"/>
+<circle cx="554" cy="297" r="2.6" fill="#f59e0b" style="--d:747ms"/>
+<circle cx="578" cy="348" r="3.0" fill="#f59e0b" style="--d:756ms"/>
+<circle cx="501" cy="279" r="4.3" fill="#f59e0b" style="--d:765ms"/>
+<circle cx="490" cy="359" r="3.0" fill="#f59e0b" style="--d:774ms"/>
+<circle cx="532" cy="286" r="3.9" fill="#f59e0b" style="--d:783ms"/>
+<circle cx="459" cy="299" r="4.7" fill="#f59e0b" style="--d:792ms"/>
+<circle cx="462" cy="293" r="4.7" fill="#f59e0b" style="--d:801ms"/>
+<circle cx="477" cy="356" r="3.5" fill="#f59e0b" style="--d:810ms"/>
+<circle cx="482" cy="311" r="2.6" fill="#f59e0b" style="--d:819ms"/>
+<circle cx="463" cy="344" r="3.9" fill="#f59e0b" style="--d:828ms"/>
+<circle cx="573" cy="377" r="2.6" fill="#f59e0b" style="--d:837ms"/>
+<circle cx="762" cy="419" r="5.1" fill="#f472b6" style="--d:846ms"/>
+<circle cx="788" cy="428" r="3.0" fill="#f472b6" style="--d:855ms"/>
+<circle cx="778" cy="424" r="3.5" fill="#f472b6" style="--d:864ms"/>
+<circle cx="838" cy="381" r="3.5" fill="#f472b6" style="--d:873ms"/>
+<circle cx="816" cy="433" r="2.6" fill="#f472b6" style="--d:882ms"/>
+<circle cx="862" cy="417" r="3.9" fill="#f472b6" style="--d:891ms"/>
+<circle cx="850" cy="435" r="3.0" fill="#f472b6" style="--d:900ms"/>
+<circle cx="860" cy="397" r="2.6" fill="#f472b6" style="--d:909ms"/>
+<circle cx="771" cy="455" r="4.3" fill="#f472b6" style="--d:918ms"/>
+<circle cx="834" cy="462" r="4.3" fill="#f472b6" style="--d:927ms"/>
+<circle cx="756" cy="402" r="3.5" fill="#f472b6" style="--d:936ms"/>
+<circle cx="897" cy="437" r="3.9" fill="#f472b6" style="--d:945ms"/>
+<circle cx="773" cy="400" r="3.5" fill="#f472b6" style="--d:954ms"/>
+<circle cx="897" cy="433" r="2.6" fill="#f472b6" style="--d:963ms"/>
+<circle cx="895" cy="419" r="3.0" fill="#f472b6" style="--d:972ms"/>
+<circle cx="826" cy="434" r="3.5" fill="#f472b6" style="--d:981ms"/>
+<circle cx="506" cy="149" r="6.0" fill="#60a5fa" style="--d:990ms"/>
+<circle cx="445" cy="136" r="3.5" fill="#60a5fa" style="--d:999ms"/>
+<circle cx="506" cy="72" r="3.5" fill="#60a5fa" style="--d:1008ms"/>
+<circle cx="409" cy="141" r="3.5" fill="#60a5fa" style="--d:1017ms"/>
+<circle cx="536" cy="141" r="3.5" fill="#60a5fa" style="--d:1026ms"/>
+<circle cx="454" cy="87" r="3.0" fill="#60a5fa" style="--d:1035ms"/>
+<circle cx="563" cy="127" r="3.0" fill="#60a5fa" style="--d:1044ms"/>
+<circle cx="522" cy="103" r="3.5" fill="#60a5fa" style="--d:1053ms"/>
+<circle cx="504" cy="103" r="3.9" fill="#60a5fa" style="--d:1062ms"/>
+<circle cx="527" cy="146" r="3.5" fill="#60a5fa" style="--d:1071ms"/>
+<circle cx="545" cy="96" r="3.9" fill="#60a5fa" style="--d:1080ms"/>
+<circle cx="472" cy="141" r="2.6" fill="#60a5fa" style="--d:1089ms"/>
+<circle cx="471" cy="99" r="3.5" fill="#60a5fa" style="--d:1098ms"/>
+<circle cx="448" cy="95" r="2.6" fill="#60a5fa" style="--d:1107ms"/>
+<circle cx="52" cy="297" r="4.3" fill="#fb7185" style="--d:1116ms"/>
+<circle cx="170" cy="282" r="3.5" fill="#fb7185" style="--d:1125ms"/>
+<circle cx="124" cy="296" r="3.0" fill="#fb7185" style="--d:1134ms"/>
+<circle cx="97" cy="297" r="3.0" fill="#fb7185" style="--d:1143ms"/>
+<circle cx="111" cy="222" r="3.0" fill="#fb7185" style="--d:1152ms"/>
+<circle cx="162" cy="235" r="4.3" fill="#fb7185" style="--d:1161ms"/>
+<circle cx="140" cy="258" r="2.6" fill="#fb7185" style="--d:1170ms"/>
+<circle cx="175" cy="265" r="3.5" fill="#fb7185" style="--d:1179ms"/>
+<circle cx="131" cy="229" r="3.9" fill="#fb7185" style="--d:1188ms"/>
+<circle cx="172" cy="285" r="4.3" fill="#fb7185" style="--d:1197ms"/>
+<circle cx="170" cy="258" r="3.5" fill="#fb7185" style="--d:1206ms"/>
+<circle cx="87" cy="229" r="3.0" fill="#fb7185" style="--d:1215ms"/>
+</g><g class="g-labels">
+<text x="300" y="73" fill="#35e0e8">BaseField</text>
+<text x="760" y="25" fill="#8b6cf6">Locales</text>
+<text x="200" y="326" fill="#4ade80">Stores</text>
+<text x="520" y="240" fill="#f59e0b">ApiService</text>
+<text x="820" y="324" fill="#f472b6">Layout</text>
+<text x="480" y="39" fill="#60a5fa">Filters</text>
+<text x="120" y="193" fill="#fb7185">Permissions</text>
+</g></svg>
+    </div>
+    <div class="stack">
+      <div class="card an" style="--i:3">
+        <div class="t"><span class="ico bl">◆</span>Що дає граф на виході</div>
+        <ul class="ls" style="margin-top:8px">
+          <li><b>Спільноти</b> — автоматичні кластери, кожен стає точкою входу в підсистему</li>
+          <li><b>God nodes</b> — найзвʼязаніші абстракції. У нас: <code class="inl">BaseField</code> (46 ребер), <code class="inl">useUserStore</code> (22)</li>
+          <li><b>Цикли імпортів</b> — знайшлись такі, про які ніхто не знав</li>
+          <li><b>Несподівані звʼязки</b> — «а чому старий authCore тягне сучасний стор?»</li>
+          <li><b>Прогалини</b> — 1 280 майже ізольованих вузлів: або мертвий код, або недоописані місця</li>
+        </ul>
+      </div>
+      <div class="card am an" style="--i:4">
+        <div class="t"><span class="ico am">!</span>Несподіваний побічний ефект</div>
+        <p>Найбільшу користь від графа отримали <b>люди, а не агенти</b>. Список циклів імпортів і god nodes — це готовий беклог технічного боргу, якого ніхто до того не бачив цілком.</p>
+      </div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Пояснити коротко, як будується: AST-розбір плюс семантичний шар, на виході <code>graph.json</code>, інтерактивний <code>graph.html</code> і текстовий <code>GRAPH_REPORT.md</code>.</li>
+      <li>Для агента найцінніший саме текстовий звіт: спільноти — це дешеві точки входу замість сліпого grep по 1000 файлів.</li>
+      <li>Історія про цикли імпортів заходить найкраще. У нас знайшлись цикли на 5 файлів через <code>filterConfig → baseField → index → baseList</code>.</li>
+      <li>Чесно: 1 280 ізольованих вузлів — це і мертвий код, і просто межа точності інструменту. Не подавати як діагноз.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«Скільки коштує побудувати граф?»</b> Структурний прохід — безкоштовний, це чистий AST. Семантичний шар на великому репозиторії вже платний, і на 1000 файлів його варто запускати точково по підпапках.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 36. LLM WIKI ═══════════ -->
+<section class="slide" data-block="Контекст проєкту" data-time="1:00" data-title="LLM wiki">
+  <div class="kicker bl an" style="--i:0">Контекст · LLM wiki</div>
+  <h2 class="an" style="--i:1">LLM wiki: три шари, три операції, одне правило</h2>
+  <div class="g3 gap">
+    <div class="card an" style="--i:2">
+      <div class="t"><span class="ico">◆</span>Три шари</div>
+      <pre style="margin-top:8px"><span class="c-a">src/</span>        <span class="c-c">сирі джерела</span>
+   ↓
+<span class="c-a">knowledge/</span>  <span class="c-c">вікі: смисли</span>
+   ↓
+<span class="c-a">AGENTS.md</span>   <span class="c-c">схема + скіли</span></pre>
+      <p style="margin-top:10px">Кожен шар щільніший за попередній. Агент іде згори вниз і зупиняється, щойно знайшов відповідь.</p>
+    </div>
+    <div class="card an" style="--i:3">
+      <div class="t"><span class="ico vi">◆</span>Три операції</div>
+      <ul class="ls vi" style="margin-top:8px">
+        <li><b>ingest</b> — оновити сторінки після змін у коді</li>
+        <li><b>query</b> — читати вікі <b>перед</b> тим, як відкрити джерело</li>
+        <li><b>lint</b> — биті посилання, сироти, застарілі сторінки</li>
+      </ul>
+      <p style="margin-top:10px">Без третьої операції вікі помирає за два місяці. Це не опція.</p>
+    </div>
+    <div class="card hl an" style="--i:4">
+      <div class="t"><span class="ico am">!</span>Правило сторінки</div>
+      <p>Сторінка несе те, <b>що не виводиться дешево з коду</b>: інваріанти, контракти, підводні камені, «чому саме так», порядок викликів.</p>
+      <p style="margin-top:10px"><b>Не</b> список полів і не сигнатури. Переказ файлу дорожчий за сам файл і старіє миттєво.</p>
+      <p style="margin-top:10px;color:var(--am)"><b>Якщо сторінка — це переказ, її не має бути. Ліміт ~2 КБ.</b></p>
+    </div>
+  </div>
+  <div class="g23 gap2">
+    <div class="card an" style="--i:5">
+      <div class="t"><span class="ico gr">◆</span>Свіжість — по хешу вмісту, а не по mtime</div>
+      <pre style="margin-top:8px"><span class="c-c">--- frontmatter сторінки ---</span>
+<span class="c-k">title</span>: <span class="c-s">ApiService</span>
+<span class="c-k">source</span>: <span class="c-s">src/services/api/index.ts</span>
+<span class="c-k">source_hash</span>: <span class="c-n">963e4a053157</span>   <span class="c-c">← ось це</span>
+<span class="c-k">updated</span>: <span class="c-s">2026-07-27</span></pre>
+    </div>
+    <div class="card rd an" style="--i:6">
+      <p><b>Реальний біль, який це вирішило:</b> ми починали з mtime. Після кожного <code class="inl">yarn install</code> або перемикання гілки половина вікі оголошувалась застарілою — і люди перестали вірити індикатору. Хеш вмісту прибрав проблему повністю.</p>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Правило сторінки — головне, що варто винести із цього слайда. Більшість документації для AI — це саме переказ коду, тобто марна витрата.</li>
+      <li>Операція <b>query</b> найнедооціненіша: вона вчить агента спочатку читати сторінку на 2 КБ, а не файл на 30 КБ.</li>
+      <li>Історія з mtime — практична порада, яку зала може забрати собі одразу. Це та деталь, на якій спотикаються всі.</li>
+      <li>Наголосити на lint: вікі без ліну — це вікі, якій через квартал ніхто не довіряє.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 37. INGEST + ЧЕСНА ОЦІНКА ═══════════ -->
+<section class="slide" data-block="Контекст проєкту" data-time="1:00" data-title="Ingest і чесна оцінка">
+  <div class="kicker bl an" style="--i:0">Контекст · автоматизація і підсумок</div>
+  <h2 class="an" style="--i:1">Документація оновлюється сама — і чи варто воно того</h2>
+  <div class="fade" style="--i:2">
+  <svg class="dia" viewBox="0 0 1000 118" role="img" aria-label="Push-driven конвеєр оновлення документації">
+    <g class="node" style="--d:0ms"><rect class="box" x="4" y="20" width="150" height="58"/><text class="lbl" x="22" y="45" font-size="13">git commit</text><text class="sml" x="22" y="64">post-commit hook</text></g>
+    <path class="flow" style="--len:30;--d:200ms" d="M160 49 L184 49" marker-end="url(#ar)"/>
+    <g class="node" style="--d:260ms"><rect class="box" x="190" y="20" width="160" height="58"/><text class="lbl" x="208" y="45" font-size="13">docs-queue</text><text class="sml" x="208" y="64">записує борг</text></g>
+    <path class="flow" style="--len:30;--d:420ms" d="M356 49 L380 49" marker-end="url(#ar)"/>
+    <g class="node" style="--d:480ms"><rect class="box" x="386" y="20" width="140" height="58"/><text class="lbl" x="404" y="45" font-size="13">git push</text><text class="sml" x="404" y="64">момент істини</text></g>
+    <path class="flow" style="--len:30;--d:640ms" d="M532 49 L556 49" marker-end="url(#ar)"/>
+    <g class="node" style="--d:700ms"><rect class="box" x="562" y="20" width="178" height="58" stroke="#f5a524" stroke-opacity=".5"/><text class="lbl" x="580" y="45" font-size="13">Stop-хук питає</text><text class="sml" x="580" y="64">рівно один раз</text></g>
+    <path class="flow" style="--len:30;--d:860ms" d="M746 49 L770 49" marker-end="url(#ar)"/>
+    <g class="node" style="--d:920ms"><rect class="box" x="776" y="20" width="220" height="58" stroke="#4ade80" stroke-opacity=".5"/><text class="lbl" x="794" y="45" font-size="13">/update-docs</text><text class="sml" x="794" y="64">оновлює зачеплені сторінки</text></g>
+    <text class="sml" x="4" y="108" fill="#6f7f97">Незакомічені правки ніколи не нудять. Вимикач: CARDONA_DOCS_GUARD=0 — будь-яка автоматизація має мати вимикач, інакше їй не довіряють.</text>
+  </svg>
+  </div>
+  <div class="g3 gap2">
+    <div class="card gr an" style="--i:4">
+      <div class="t"><span class="ico gr">✓</span>Що реально працює</div>
+      <ul class="ls ok" style="margin-top:8px">
+        <li>Онбординг: нова людина читає 20 сторінок замість 1000 файлів</li>
+        <li>Агент відповідає «де це лежить» без сліпого пошуку</li>
+        <li>Знання команди перестало бути в голові двох людей</li>
+      </ul>
+    </div>
+    <div class="card am an" style="--i:5">
+      <div class="t"><span class="ico am">~</span>Що це коштує</div>
+      <ul class="ls" style="margin-top:8px">
+        <li>Дисципліна: сторінки треба ревʼювати, як код</li>
+        <li>Спокуса писати документацію заради документації</li>
+        <li>Робочий механізм — це ще й скрипти, які хтось підтримує</li>
+      </ul>
+    </div>
+    <div class="card rd an" style="--i:6">
+      <div class="t"><span class="ico rd">!</span>Де межа</div>
+      <ul class="ls no" style="margin-top:8px">
+        <li>На проєкті до сотні файлів це не окупається — простіше читати код</li>
+        <li>Без ліну й ревʼю вікі гниє й починає шкодити</li>
+        <li>Сторінки-перекази гірші за їх відсутність</li>
+      </ul>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Конвеєр показати швидко, головне на слайді — три нижні картки.</li>
+      <li>Чесність тут критична: якщо продавати це як срібну кулю, першому ж скептику буде що заперечити.</li>
+      <li>Найсильніший аргумент «за» — онбординг. Він вимірюваний і його всі відчували.</li>
+      <li>Сказати прямо: <b>на маленькому проєкті цього робити не треба.</b> Це чесно й підвищує довіру до решти доповіді.</li>
+    </ul>
+    <h4>Якщо спитають</h4>
+    <div class="qa"><b>«Хто пише сторінки — людина чи агент?»</b> Агент пропонує, людина ревʼює в тому ж MR, що й код. Сторінка без ревʼю — це припущення моделі, а не знання команди.</div>
+  </div>
+</section>
+
+<!-- ═══════════ 38. РОЗДАЧА (ОПЦІЙНИЙ) ═══════════ -->
+<section class="slide" data-block="Підсумок" data-time="0:35" data-title="Як це роздається на 5 проєктів" data-optional="1">
+  <div class="opt"><span class="pill am">опційний слайд</span></div>
+  <div class="kicker am an" style="--i:0">Як це в нас · інфраструктура</div>
+  <h2 class="an" style="--i:1">Один апдейт ядра — і скіли зʼявились у всіх панелей</h2>
+  <div class="g23 gap">
+    <div class="card an" style="--i:2">
+      <pre><span class="c-a">cardona-core-service/.claude/*</span>   <span class="c-c">канонічні копії</span>
+              ↓ npm
+<span class="c-a">node_modules/cardona-core-service</span>
+              ↓ SessionStart hook
+<span class="c-a">scripts/sync-core-claude.mjs</span>
+              ↓ відносні симлінки
+<span class="c-a">cardona/.claude/skills/*</span>
+<span class="c-a">marbella-panel/.claude/skills/*</span>
+<span class="c-a">compostela-panel/.claude/skills/*</span>
+<span class="c-a">alaro-panel/.claude/skills/*</span></pre>
+    </div>
+    <div class="stack">
+      <div class="card hl an" style="--i:3"><div class="t"><span class="ico">◆</span>Чому симлінки, а не копії</div><p>Інструмент не сканує <code class="inl">node_modules</code>. Симлінк робить скіл видимим, лишаючи одне джерело правди.</p></div>
+      <div class="card gr an" style="--i:4"><div class="t"><span class="ico gr">◆</span>Проєкт завжди перемагає</div><p>Реальна папка в панелі <b>затіняє</b> симлінк. Потрібна своя версія скіла — просто створи її поруч, і вона виграє.</p></div>
+      <div class="card an" style="--i:5"><p>Скрипт ідемпотентний і ніколи не роняє процес — щоб не ламати <code class="inl">yarn install</code> і CI.</p></div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li><b>Опційний слайд.</b> Пропустити, якщо часу мало — це наша внутрішня інфраструктура.</li>
+      <li>Універсальна ідея, яку варто озвучити навіть при пропуску: <b>у скілів має бути одне джерело правди й механізм роздачі.</b> Копіпаста між репозиторіями не масштабується.</li>
+      <li>«Проєкт затіняє ядро» — гарний патерн, знайомий усім по CSS і по конфігах.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 39. ПОЧНИ ЗАВТРА ═══════════ -->
+<section class="slide" data-block="Підсумок" data-time="1:00" data-title="Почни завтра">
+  <div class="kicker gr an" style="--i:0">Підсумок</div>
+  <h2 class="an" style="--i:1">Пʼять кроків, які можна зробити завтра</h2>
+  <div class="g23 gap">
+    <ol class="num">
+      <li class="an" style="--i:2"><b>AGENTS.md на одну сторінку.</b> Конвенції, команди, чого не робити. Одна сторінка, не десять.</li>
+      <li class="an" style="--i:3"><b>Виміряй бюджет.</b> Розділи always-on і on-trigger. Побачиш, за що платиш у кожній сесії.</li>
+      <li class="an" style="--i:4"><b>Один скіл на найнуднішу рутину.</b> Не шість. Один, який ти робиш руками щотижня.</li>
+      <li class="an" style="--i:5"><b>Винеси детермінізм у скрипт.</b> Усе, що «порахуй / знайди / розпарси».</li>
+      <li class="an" style="--i:6"><b>Поміряй різницю.</b> Baseline → зміна → порівняння. Без цього це не інженерія, а віра.</li>
+    </ol>
+    <div class="stack">
+      <div class="card hl an" style="--i:4">
+        <div class="t"><span class="ico">→</span>Куди рухаємось ми</div>
+        <ul class="ls" style="margin-top:8px">
+          <li><b>Універсальні скіли</b> за відкритим стандартом — щоб не залежати від одного інструменту</li>
+          <li><b>Свій MCP-сервер-агрегатор</b> — спільна памʼять для парку агентів</li>
+          <li><b>Jev під наглядом</b> — спостерігаємо, не впроваджуємо</li>
+        </ul>
+      </div>
+      <div class="card am an" style="--i:6">
+        <p style="font-size:clamp(14px,1.4vw,18px)"><b>Якщо забути все інше — памʼятайте одне:</b> агент це функція від контексту. Керуйте тим, що в нього потрапляє, і 80% проблем зникнуть самі.</p>
+      </div>
+    </div>
+  </div>
+  <div class="notes-src">
+    <h4>Тези</h4>
+    <ul>
+      <li>Пункт 3 проговорити з натиском: люди зазвичай намагаються побудувати всю систему одразу і кидають.</li>
+      <li>Права нижня плашка — фінальна думка доповіді. Сказати її повільно й зробити паузу.</li>
+      <li>Запропонувати допомогу: хто хоче зробити свій перший скіл — покажу на своєму прикладі за 20 хвилин.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 40. Q&A ═══════════ -->
+<section class="slide" data-block="Підсумок" data-time="0:20" data-title="Q&A і джерела">
+  <div class="title-wrap">
+    <div class="kicker an" style="--i:0">Дякую</div>
+    <h1 class="an" style="--i:1">Питання?<br><span class="gradtx">Розберемо будь-що детальніше</span></h1>
+    <div class="g3 gap2">
+      <div class="card an" style="--i:2">
+        <div class="t"><span class="ico">◆</span>Стандарти й документація</div>
+        <p style="font-size:13px">Agent Skills open standard · Claude Docs: skill authoring best practices · MCP specification 2026-07-28 · AGENTS.md</p>
+      </div>
+      <div class="card an" style="--i:3">
+        <div class="t"><span class="ico vi">◆</span>Інженерні матеріали</div>
+        <p style="font-size:13px">Anthropic: effective context engineering for AI agents · Code execution with MCP · TypeSafe AI: Jev docs і публічні кейси (jev-skillful, pi-warden)</p>
+      </div>
+      <div class="card an" style="--i:4">
+        <div class="t"><span class="ico gr">◆</span>Наші репозиторії</div>
+        <p style="font-size:13px">cardona-core-service · cardona · compostela-panel · marbella-panel · alaro-panel — <code class="inl">.claude/</code>, <code class="inl">knowledge/</code>, <code class="inl">scripts/</code></p>
+      </div>
+    </div>
+    <p class="sub gap2 an" style="--i:5">Слайди й нотатки спікера — у роздатці (Ctrl+P). Питання, які не встигнемо, — пишіть, розберемо окремо.</p>
+  </div>
+  <div class="notes-src">
+    <h4>Очікувані питання</h4>
+    <div class="qa"><b>«З чого почати саме мені?»</b> З вимірювання. Поки не знаєш, за що платиш, будь-яка оптимізація — вгадування.</div>
+    <div class="qa" style="margin-top:10px"><b>«Скільки часу це забирає в тижні?»</b> Після того як механізм стоїть — майже нуль. Основна вартість у перших двох тижнях, поки формулюєш правила.</div>
+    <div class="qa" style="margin-top:10px"><b>«А якщо інструмент завтра зміниться?»</b> Саме тому блок про портативність. Скіли за відкритим стандартом переживуть зміну, самописна обвʼязка — ні.</div>
+    <div class="qa" style="margin-top:10px"><b>«Чи не робить це нас залежними від AI?»</b> Скіли й вікі корисні людям так само: це записані процедури й пояснення, яких раніше не було ніде.</div>
+    <h4>Якщо часу лишилось багато</h4>
+    <ul><li>Показати живцем <code>node scripts/claude-budget.mjs</code> на екрані — це найсильніша демонстрація.</li><li>Або відкрити <code>graph.html</code> і покрутити граф.</li></ul>
+  </div>
+</section>
+
+</main>
+
+<aside id="notes" aria-label="Картки спікера">
+  <header>
+    <span class="h">Картки спікера</span>
+    <span class="tm" id="nTime"></span>
+    <button type="button" id="nClose" style="margin-left:8px;appearance:none;background:transparent;border:1px solid var(--line2);color:var(--tx3);border-radius:7px;padding:4px 9px;font:600 11px/1 var(--mono);cursor:pointer">esc</button>
+  </header>
+  <div class="body" id="nBody"></div>
+</aside>
+
+<div class="hud">
+  <span class="blk" id="hBlock">—</span>
+  <span class="spacer"></span>
+  <button type="button" id="bNotes" title="Картки спікера (S)">S · нотатки</button>
+  <button type="button" id="bJump" title="Список слайдів (O)">O · слайди</button>
+  <button type="button" id="bTimer" title="Таймер (T)">T · старт</button>
+  <span id="timer">00:00 / 24:00</span>
+  <button type="button" id="bHelp" title="Хоткеї (?)">?</button>
+  <span class="cnt" id="hCount">1<span> / 40</span></span>
+</div>
+
+<dialog id="jump" aria-label="Перехід до слайда">
+  <div class="wrap"><h3>Слайди</h3><div class="jgrid" id="jGrid"></div></div>
+</dialog>
+
+<dialog id="help" aria-label="Клавіатурні скорочення">
+  <div class="wrap">
+    <h3>Клавіатурні скорочення</h3>
+    <dl>
+      <dt>← → Space</dt><dd>Попередній / наступний слайд</dd>
+      <dt>Home End</dt><dd>Перший / останній слайд</dd>
+      <dt>S</dt><dd>Картки спікера — відкрити чи закрити</dd>
+      <dt>O</dt><dd>Список усіх слайдів для швидкого переходу</dd>
+      <dt>T</dt><dd>Таймер доповіді: старт, пауза</dd>
+      <dt>R</dt><dd>Скинути таймер</dd>
+      <dt>F</dt><dd>Повноекранний режим</dd>
+      <dt>Ctrl+P</dt><dd>Друк: усі слайди разом із нотатками як роздатка</dd>
+      <dt>Esc</dt><dd>Закрити панель чи діалог</dd>
+    </dl>
+  </div>
+</dialog>
+
+<script>
+(function(){
+  "use strict";
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total  = slides.length;
+  var cur    = 0;
+  var TALK   = 24 * 60; // цільова тривалість, сек
+
+  var $ = function(id){ return document.getElementById(id); };
+  var elProg = $('prog'), elCount = $('hCount'), elBlock = $('hBlock');
+  var elNotes = $('notes'), elNBody = $('nBody'), elNTime = $('nTime');
+  var dlgJump = $('jump'), dlgHelp = $('help'), elJGrid = $('jGrid');
+  var elTimer = $('timer'), btnTimer = $('bTimer'), btnNotes = $('bNotes');
+
+  /* ---------- безпечне сховище (file:// може блокувати) ---------- */
+  function store(k, v){
+    try{ if(v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }
+    catch(e){ return null; }
+  }
+
+  /* ---------- нотатки ---------- */
+  function renderNotes(){
+    var src = slides[cur].querySelector('.notes-src');
+    elNBody.innerHTML = src ? src.innerHTML : '<p style="color:var(--tx3)">Для цього слайда нотаток немає.</p>';
+    elNBody.scrollTop = 0;
+    var t = slides[cur].dataset.time;
+    elNTime.textContent = t ? ('слайд ≈ ' + t) : '';
+  }
+  function setNotes(open){
+    elNotes.classList.toggle('open', open);
+    document.body.classList.toggle('notes-open', open);
+    btnNotes.classList.toggle('on', open);
+    store('deck.notes', open ? '1' : '0');
+  }
+  function toggleNotes(){ setNotes(!elNotes.classList.contains('open')); }
+
+  /* ---------- навігація ---------- */
+  function paint(){
+    slides.forEach(function(s, i){ s.classList.toggle('active', i === cur); });
+    elProg.style.width = (total < 2 ? 100 : (cur / (total - 1)) * 100) + '%';
+    elCount.innerHTML = (cur + 1) + '<span> / ' + total + '</span>';
+    var b = slides[cur].dataset.block || '';
+    var opt = slides[cur].dataset.optional ? ' · опційний' : '';
+    elBlock.textContent = b + opt;
+    renderNotes();
+    Array.prototype.forEach.call(elJGrid.children, function(btn, i){
+      btn.classList.toggle('cur', i === cur);
+    });
+    if (history.replaceState) history.replaceState(null, '', '#' + (cur + 1));
+  }
+  function goTo(i, skipAnim){
+    i = Math.max(0, Math.min(total - 1, i));
+    if (i === cur && !skipAnim) return;
+    cur = i;
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!skipAnim && !reduce && document.startViewTransition) {
+      document.startViewTransition(paint);
+    } else {
+      paint();
+    }
+  }
+  var next = function(){ goTo(cur + 1); };
+  var prev = function(){ goTo(cur - 1); };
+
+  /* ---------- список слайдів ---------- */
+  slides.forEach(function(s, i){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.innerHTML = '<span class="k">' + (i + 1) + '</span><span>' +
+      (s.dataset.title || 'Слайд ' + (i + 1)) +
+      (s.dataset.optional ? ' <span style="color:var(--am);font-size:11px">· опц.</span>' : '') + '</span>';
+    b.addEventListener('click', function(){ if (dlgJump.open) dlgJump.close(); goTo(i); });
+    elJGrid.appendChild(b);
+  });
+
+  /* ---------- таймер ---------- */
+  var tSec = 0, tRun = false, tId = null;
+  function fmt(s){
+    var m = Math.floor(Math.abs(s) / 60), r = Math.abs(s) % 60;
+    return (s < 0 ? '-' : '') + (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r;
+  }
+  function paintTimer(){
+    elTimer.textContent = fmt(tSec) + ' / ' + fmt(TALK);
+    elTimer.classList.toggle('run', tRun && tSec <= TALK);
+    elTimer.classList.toggle('over', tSec > TALK);
+  }
+  function toggleTimer(){
+    tRun = !tRun;
+    btnTimer.textContent = tRun ? 'T · пауза' : 'T · старт';
+    btnTimer.classList.toggle('on', tRun);
+    if (tRun) { tId = setInterval(function(){ tSec++; paintTimer(); }, 1000); }
+    else { clearInterval(tId); }
+    paintTimer();
+  }
+  function resetTimer(){
+    if (tRun) toggleTimer();
+    tSec = 0; paintTimer();
+  }
+
+  /* ---------- клавіатура ---------- */
+  document.addEventListener('keydown', function(e){
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ' || k === 'Spacebar') { e.preventDefault(); next(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp') { e.preventDefault(); prev(); }
+    else if (k === 'Home') { e.preventDefault(); goTo(0); }
+    else if (k === 'End') { e.preventDefault(); goTo(total - 1); }
+    else if (k === 's' || k === 'S' || k === 'ы' || k === 'і' || k === 'І') { e.preventDefault(); toggleNotes(); }
+    else if (k === 'o' || k === 'O' || k === 'щ') { e.preventDefault(); dlgJump.open ? dlgJump.close() : dlgJump.showModal(); }
+    else if (k === 't' || k === 'T' || k === 'е') { e.preventDefault(); toggleTimer(); }
+    else if (k === 'r' || k === 'R' || k === 'к') { e.preventDefault(); resetTimer(); }
+    else if (k === 'f' || k === 'F' || k === 'а') {
+      e.preventDefault();
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+    }
+    else if (k === '?' || k === '/') { e.preventDefault(); dlgHelp.open ? dlgHelp.close() : dlgHelp.showModal(); }
+    else if (k === 'Escape') {
+      if (dlgJump.open || dlgHelp.open) return; // dialog закриється сам
+      if (elNotes.classList.contains('open')) { e.preventDefault(); setNotes(false); }
+    }
+  });
+
+  /* ---------- кнопки ---------- */
+  btnNotes.addEventListener('click', toggleNotes);
+  $('nClose').addEventListener('click', function(){ setNotes(false); });
+  $('bJump').addEventListener('click', function(){ dlgJump.showModal(); });
+  $('bHelp').addEventListener('click', function(){ dlgHelp.showModal(); });
+  btnTimer.addEventListener('click', toggleTimer);
+  [dlgJump, dlgHelp].forEach(function(d){
+    d.addEventListener('click', function(e){ if (e.target === d) d.close(); });
+  });
+
+  /* ---------- свайпи ---------- */
+  var sx = 0, sy = 0;
+  document.addEventListener('touchstart', function(e){
+    sx = e.changedTouches[0].clientX; sy = e.changedTouches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchend', function(e){
+    var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6) { dx < 0 ? next() : prev(); }
+  }, { passive: true });
+
+  /* ---------- друк: показати всі слайди ---------- */
+  window.addEventListener('beforeprint', function(){
+    slides.forEach(function(s){ s.classList.add('active'); });
+  });
+  window.addEventListener('afterprint', function(){ paint(); });
+
+  /* ---------- старт ---------- */
+  var fromHash = parseInt((location.hash || '').replace('#', ''), 10);
+  if (fromHash >= 1 && fromHash <= total) cur = fromHash - 1;
+  if (store('deck.notes') === '1') setNotes(true);
+  paintTimer();
+  goTo(cur, true);
+})();
+</script>
+</body>
+</html>
